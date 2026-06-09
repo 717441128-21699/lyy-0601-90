@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import {
   Flame,
   Target,
@@ -13,6 +13,7 @@ import {
   Clock,
   Star,
   Bell,
+  Megaphone,
 } from 'lucide-react';
 import StatCard from '@/components/StatCard';
 import ProgressRing from '@/components/ProgressRing';
@@ -34,10 +35,26 @@ const Dashboard = () => {
   const { todos, toggleTodo } = useNoteStore();
   const { notifications, checkAndSendReminders, markAsRead } = useNotificationStore();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [highlightNotification, setHighlightNotification] = useState(false);
 
   useEffect(() => {
     checkAndSendReminders();
   }, [checkAndSendReminders]);
+
+  useEffect(() => {
+    if (location.state?.highlightNotification) {
+      setHighlightNotification(true);
+      setTimeout(() => {
+        const element = document.getElementById('notifications-section');
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 100);
+      setTimeout(() => setHighlightNotification(false), 3000);
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   const handleNotificationClick = (notif: typeof notifications[0]) => {
     markAsRead(notif.id);
@@ -329,10 +346,18 @@ const Dashboard = () => {
           <Calendar />
         </div>
 
-        <div className="card">
+        <div 
+          id="notifications-section"
+          className={`card transition-all ${
+            highlightNotification ? 'ring-4 ring-primary-300 ring-opacity-75 animate-pulse' : ''
+          }`}
+        >
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-warmgray-800">最新通知</h3>
-            <Link to="/nutritionist" className="text-sm text-primary-600 hover:text-primary-700">
+            <h3 className="text-lg font-semibold text-warmgray-800 flex items-center gap-2">
+              <Bell size={20} className="text-primary-500" />
+              最新通知
+            </h3>
+            <Link to="/notifications" className="text-sm text-primary-600 hover:text-primary-700">
               查看全部
             </Link>
           </div>
@@ -353,12 +378,20 @@ const Dashboard = () => {
                       ? 'bg-red-50 border-red-500'
                       : notif.type === 'reminder'
                       ? 'bg-accent-50 border-accent-500'
+                      : notif.type === 'system'
+                      ? 'bg-blue-50 border-blue-500'
+                      : notif.type === 'report'
+                      ? 'bg-purple-50 border-purple-500'
                       : 'bg-primary-50 border-primary-500'
                   }`}
                 >
                   <div className="flex items-start gap-2">
                     <span className="text-lg">
-                      {notif.type === 'high_risk' ? '⚠️' : notif.type === 'reminder' ? '⏰' : '📢'}
+                      {notif.type === 'high_risk' ? '⚠️' : 
+                       notif.type === 'reminder' ? '⏰' : 
+                       notif.type === 'system' ? '📢' :
+                       notif.type === 'report' ? '📊' :
+                       notif.type === 'note' ? '💬' : '🔔'}
                     </span>
                     <div>
                       <h4 className="font-medium text-warmgray-700">{notif.title}</h4>

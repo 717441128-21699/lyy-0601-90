@@ -46,6 +46,15 @@ const NutritionistNotesPage = () => {
     }
   }, [location.state]);
 
+  const getRiskLevelLabel = (level?: 'low' | 'medium' | 'high') => {
+    switch (level) {
+      case 'high': return { label: '高风险', className: 'tag-danger' };
+      case 'medium': return { label: '中风险', className: 'tag-warning' };
+      case 'low': return { label: '低风险', className: 'tag-success' };
+      default: return null;
+    }
+  };
+
   const filteredNotes = notes.filter(note => {
     if (activeTab === 'highRisk') return note.isHighRisk;
     if (activeTab === 'unread') return !note.reply;
@@ -235,24 +244,57 @@ const NutritionistNotesPage = () => {
 
                         {relatedRecord && (
                           <div className="mt-3 p-3 bg-cream-100 rounded-xl">
-                            <div className="flex items-center gap-2 text-sm text-warmgray-500 mb-1">
+                            <div className="flex items-center gap-2 text-sm text-warmgray-500 mb-2">
                               <span>📎 相关记录</span>
                               <span>·</span>
                               <span>{getMealLabel(relatedRecord.mealType)}</span>
+                              <span>·</span>
+                              <span>{relatedRecord.calorieRange[0]}-{relatedRecord.calorieRange[1]} kcal</span>
                             </div>
-                            <p className="text-warmgray-700">{relatedRecord.description}</p>
-                            {relatedRecord.isHighRisk && (
-                              <p className="text-sm text-red-500 mt-1">⚠️ {relatedRecord.riskReason}</p>
+                            <p className="text-warmgray-700 mb-2">{relatedRecord.description}</p>
+                            
+                            {relatedRecord.riskLevel && (
+                              <div className="flex flex-wrap items-center gap-2 mb-2">
+                                <span className={`tag ${getRiskLevelLabel(relatedRecord.riskLevel)?.className}`}>
+                                  {getRiskLevelLabel(relatedRecord.riskLevel)?.label}
+                                </span>
+                                {relatedRecord.riskModifiedBy === 'nutritionist' && (
+                                  <span className="tag tag-primary text-xs">
+                                    营养师已审核
+                                  </span>
+                                )}
+                              </div>
                             )}
+                            
+                            {relatedRecord.riskReason && (
+                              <p className="text-sm text-red-500 mb-2">⚠️ {relatedRecord.riskReason}</p>
+                            )}
+                            
+                            {relatedRecord.nutritionistNote && (
+                              <div className="mt-2 p-2 bg-yellow-50 border-l-2 border-yellow-400 rounded-r-lg">
+                                <p className="text-xs font-medium text-yellow-700 mb-1">💬 营养师批注</p>
+                                <p className="text-sm text-yellow-800">{relatedRecord.nutritionistNote}</p>
+                              </div>
+                            )}
+                            
                             {relatedRecord.alternativeRecipe && (
                               <div className="mt-2 p-2 bg-primary-50 rounded-lg">
                                 <p className="text-sm font-medium text-primary-700 mb-1">
                                   🍳 替代食谱：{relatedRecord.alternativeRecipe.name}
                                 </p>
-                                <p className="text-xs text-primary-600">
+                                <p className="text-xs text-primary-600 mb-1">
                                   {relatedRecord.alternativeRecipe.calories} kcal
                                 </p>
+                                <p className="text-xs text-primary-600">
+                                  食材：{relatedRecord.alternativeRecipe.ingredients.map(i => i.name).join('、')}
+                                </p>
                               </div>
+                            )}
+                            
+                            {relatedRecord.riskModifiedAt && (
+                              <p className="text-xs text-warmgray-400 mt-2">
+                                最后更新：{formatDateTime(relatedRecord.riskModifiedAt)}
+                              </p>
                             )}
                           </div>
                         )}

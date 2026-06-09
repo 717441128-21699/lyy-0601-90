@@ -14,7 +14,7 @@ interface NotificationState {
   rankings: GroupRanking[];
   markAsRead: (id: string) => void;
   markAllAsRead: () => void;
-  createReviewRequest: (data: Omit<ReviewRequest, 'id' | 'userId' | 'status' | 'createdAt'>) => void;
+  createReviewRequest: (data: Omit<ReviewRequest, 'id' | 'userId' | 'status' | 'createdAt'>) => ReviewRequest;
   addNotification: (data: Omit<Notification, 'id' | 'userId' | 'read' | 'createdAt'>) => Notification;
   getUnreadCount: () => number;
   getNotificationsByType: (type: Notification['type']) => Notification[];
@@ -56,7 +56,7 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
     return { notifications: updated };
   }),
   
-  createReviewRequest: (data) => set((state) => {
+  createReviewRequest: (data) => {
     const newRequest: ReviewRequest = {
       ...data,
       id: generateId('review'),
@@ -64,24 +64,13 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
       status: 'pending',
       createdAt: getTodayISO(),
     };
-    const updated = [newRequest, ...state.reviewRequests];
-    storage.set('reviewRequests', updated);
-    
-    const newNotif: Notification = {
-      id: generateId('notif'),
-      userId: 'user-001',
-      type: 'system',
-      title: '📅 复盘申请已提交',
-      content: `您的一对一复盘申请已提交，营养师将在24小时内确认时间。`,
-      relatedRecordId: newRequest.id,
-      read: false,
-      createdAt: getTodayISO(),
-    };
-    const updatedNotifs = [newNotif, ...state.notifications];
-    storage.set('notifications', updatedNotifs);
-    
-    return { reviewRequests: updated, notifications: updatedNotifs };
-  }),
+    set((state) => {
+      const updated = [newRequest, ...state.reviewRequests];
+      storage.set('reviewRequests', updated);
+      return { reviewRequests: updated };
+    });
+    return newRequest;
+  },
   
   addNotification: (data) => {
     const newNotif: Notification = {

@@ -31,8 +31,12 @@ export interface DietRecord {
   description: string;
   calorieRange: [number, number];
   isHighRisk: boolean;
+  riskLevel?: 'low' | 'medium' | 'high';
   riskReason?: string;
   alternativeRecipe?: Recipe;
+  nutritionistNote?: string;
+  riskModifiedBy?: 'auto' | 'nutritionist';
+  riskModifiedAt?: string;
   createdAt: string;
 }
 
@@ -134,6 +138,8 @@ export interface ReviewRequest {
   createdAt: string;
   rejectionReason?: string;
   meetingUrl?: string;
+  approvedTime?: string;
+  reviewNotes?: string;
 }
 
 export interface Notification {

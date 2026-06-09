@@ -83,21 +83,21 @@ const NotificationsPage = () => {
     switch (notif.type) {
       case 'high_risk':
         if (notif.relatedRecordId) {
-          const todayRecords = getRecordsByDate(getToday());
-          const record = todayRecords.find(r => r.id === notif.relatedRecordId);
-          if (record) {
-            navigate('/diet', { state: { highlightId: notif.relatedRecordId } });
-            return;
-          }
+          navigate('/diet', { state: { highlightId: notif.relatedRecordId } });
+        } else {
+          navigate('/diet');
         }
-        navigate('/diet');
         break;
       case 'reminder':
         navigate('/diet');
         break;
       case 'report':
         if (notif.relatedRecordId) {
-          navigate('/reports', { state: { highlightReportId: notif.relatedRecordId } });
+          if (notif.title.includes('复盘')) {
+            navigate('/reports', { state: { highlightReviewId: notif.relatedRecordId } });
+          } else {
+            navigate('/reports', { state: { highlightReportId: notif.relatedRecordId } });
+          }
         } else {
           navigate('/reports');
         }
@@ -110,7 +110,7 @@ const NotificationsPage = () => {
         }
         break;
       case 'system':
-        navigate('/dashboard');
+        navigate('/dashboard', { state: { highlightNotification: true } });
         break;
       default:
         navigate('/dashboard');

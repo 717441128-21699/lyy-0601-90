@@ -30,11 +30,15 @@ const ReportsPage = () => {
   const location = useLocation();
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [selectedReport, setSelectedReport] = useState<string | null>(null);
+  const [selectedReviewId, setSelectedReviewId] = useState<string | null>(null);
   const [highlightReportId, setHighlightReportId] = useState<string | null>(null);
+  const [highlightReviewId, setHighlightReviewId] = useState<string | null>(null);
   const [preferredDate, setPreferredDate] = useState('');
   const [preferredTime, setPreferredTime] = useState('19:00');
   const [reviewType, setReviewType] = useState<'video' | 'voice'>('video');
   const [reviewNotes, setReviewNotes] = useState('');
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
 
   const latestReport = reports[0];
 
@@ -51,16 +55,66 @@ const ReportsPage = () => {
       setTimeout(() => setHighlightReportId(null), 3000);
       window.history.replaceState({}, document.title);
     }
+    
+    if (location.state?.highlightReviewId) {
+      setHighlightReviewId(location.state.highlightReviewId);
+      setSelectedReviewId(location.state.highlightReviewId);
+      setTimeout(() => {
+        const element = document.getElementById(`review-${location.state.highlightReviewId}`);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 100);
+      setTimeout(() => setHighlightReviewId(null), 3000);
+      window.history.replaceState({}, document.title);
+    }
   }, [location.state]);
+
+  const handleGenerateWeeklyReport = () => {
+    const newReport = {
+      id: `report-${Date.now()}`,
+      weekStart: getToday(),
+      weekEnd: getToday(),
+      summary: {
+        avgCalories: 1450,
+        totalExerciseMinutes: 210,
+        weightChange: -0.8,
+        checkInDays: 6,
+        avgDailyCalories: 1450,
+      },
+      highlights: ['运动时长达标', '饮食控制良好', '体重稳步下降'],
+      improvements: ['早餐蛋白质摄入不足', '周末热量略有超标'],
+      recommendations: ['增加鸡蛋、牛奶等高蛋白食物', '周末注意控制零食摄入'],
+      createdAt: new Date().toISOString(),
+    };
+
+    addNotification({
+      type: 'report',
+      title: '📊 周报告已生成',
+      content: `您的本周健康报告已生成，体重下降 ${newReport.summary.weightChange} kg，点击查看详细分析和营养师建议。`,
+      relatedRecordId: newReport.id,
+    });
+
+    setSuccessMessage('周报告已生成，通知中心可查看');
+    setShowSuccess(true);
+    setTimeout(() => setShowSuccess(false), 3000);
+  };
 
   const handleCreateReview = () => {
     if (!preferredDate || !preferredTime) return;
 
-    createReviewRequest({
+    const newRequest = createReviewRequest({
       preferredDate,
       preferredTime,
       type: reviewType,
       notes: reviewNotes,
+    });
+
+    addNotification({
+      type: 'report',
+      title: '📅 复盘申请已提交',
+      content: `您的${reviewType === 'video' ? '视频' : '语音'}复盘申请已提交，预约时间为${preferredDate} ${preferredTime}，营养师将在24小时内确认。`,
+      relatedRecordId: newRequest.id,
     });
 
     setPreferredDate('');
@@ -68,6 +122,10 @@ const ReportsPage = () => {
     setReviewType('video');
     setReviewNotes('');
     setShowReviewModal(false);
+    
+    setSuccessMessage('复盘申请已提交，通知中心可查看');
+    setShowSuccess(true);
+    setTimeout(() => setShowSuccess(false), 3000);
   };
 
   const getStatusBadge = (status: string) => {
@@ -302,20 +360,34 @@ const ReportsPage = () => {
               ))}
             </div>
           </div>
-        </div>
 
-        <div className="space-y-6">
           <div className="card">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold text-warmgray-800">复盘申请</h3>
-              <button
-                onClick={() => setShowReviewModal(true)}
-                className="text-sm text-primary-600 hover:text-primary-700 flex items-center gap-1"
-              >
-                <Plus size={14} />
-                新建
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleGenerateWeeklyReport}
+                  className="text-sm text-primary-600 hover:text-primary-700 flex items-center gap-1 mr-2"
+                >
+                  <FileText size={14} />
+                  生成周报告
+                </button>
+                <button
+                  onClick={() => setShowReviewModal(true)}
+                  className="text-sm text-primary-600 hover:text-primary-700 flex items-center gap-1"
+                >
+                  <Plus size={14} />
+                  新建
+                </button>
+              </div>
             </div>
+
+            {showSuccess && (
+              <div className="mb-4 p-3 bg-primary-50 border border-primary-200 rounded-xl text-primary-700 text-sm flex items-center gap-2 animate-fade-in">
+                <CheckCircle size={16} />
+                {successMessage}
+              </div>
+            )}
 
             {reviewRequests.length === 0 ? (
               <div className="text-center py-8">
@@ -330,7 +402,12 @@ const ReportsPage = () => {
                   return (
                     <div
                       key={request.id}
-                      className={`p-4 rounded-xl border ${
+                      id={`review-${request.id}`}
+                      className={`rounded-xl border overflow-hidden transition-all ${
+                        highlightReviewId === request.id
+                          ? 'ring-4 ring-primary-300 ring-opacity-75 animate-pulse'
+                          : ''
+                      } ${
                         request.status === 'pending'
                           ? 'bg-yellow-50 border-yellow-200'
                           : request.status === 'completed'
@@ -338,50 +415,92 @@ const ReportsPage = () => {
                           : 'bg-cream-50 border-cream-200'
                       }`}
                     >
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          {request.type === 'video' ? (
-                            <Video size={16} className="text-primary-500" />
-                          ) : (
-                            <Phone size={16} className="text-accent-500" />
+                      <div
+                        className="p-4 cursor-pointer"
+                        onClick={() => setSelectedReviewId(selectedReviewId === request.id ? null : request.id)}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            {request.type === 'video' ? (
+                              <Video size={16} className="text-primary-500" />
+                            ) : (
+                              <Phone size={16} className="text-accent-500" />
+                            )}
+                            <span className="font-medium text-warmgray-800">
+                              {request.type === 'video' ? '视频复盘' : '语音复盘'}
+                            </span>
+                            <span className={`px-2 py-0.5 rounded-full text-xs flex items-center gap-1 ${status.className}`}>
+                              {status.icon}
+                              {status.text}
+                            </span>
+                          </div>
+                          <ChevronRight size={20} className={`text-warmgray-400 transition-transform ${selectedReviewId === request.id ? 'rotate-90' : ''}`} />
+                        </div>
+                        
+                        <div className="flex items-center gap-4 text-sm text-warmgray-500">
+                          <div className="flex items-center gap-1">
+                            <Calendar size={14} />
+                            {formatDate(request.preferredDate)}
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Clock size={14} />
+                            {request.preferredTime}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {selectedReviewId === request.id && (
+                        <div className="px-4 pb-4 border-t border-current/10 pt-3">
+                          {request.notes && (
+                            <div className="mb-3">
+                              <h4 className="font-medium text-warmgray-700 text-sm mb-1">备注</h4>
+                              <p className="text-warmgray-600 text-sm bg-white/50 p-2 rounded-lg">
+                                {request.notes}
+                              </p>
+                            </div>
                           )}
-                          <span className="font-medium text-warmgray-800">
-                            {request.type === 'video' ? '视频复盘' : '语音复盘'}
-                          </span>
+                          
+                          {request.status === 'approved' && request.approvedTime && (
+                            <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                              <div className="flex items-center gap-2 text-green-700 text-sm">
+                                <CheckCircle size={16} />
+                                <span className="font-medium">营养师已确认</span>
+                              </div>
+                              <p className="text-green-600 text-sm mt-1">
+                                确认时间：{formatDateTime(request.approvedTime)}
+                              </p>
+                            </div>
+                          )}
+                          
+                          {request.status === 'rejected' && request.rejectionReason && (
+                            <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                              <div className="flex items-center gap-2 text-red-700 text-sm">
+                                <XCircle size={16} />
+                                <span className="font-medium">申请已拒绝</span>
+                              </div>
+                              <p className="text-red-600 text-sm mt-1">
+                                原因：{request.rejectionReason}
+                              </p>
+                            </div>
+                          )}
+                          
+                          {request.status === 'completed' && request.reviewNotes && (
+                            <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                              <div className="flex items-center gap-2 text-blue-700 text-sm">
+                                <MessageSquare size={16} />
+                                <span className="font-medium">复盘纪要</span>
+                              </div>
+                              <p className="text-blue-600 text-sm mt-1">
+                                {request.reviewNotes}
+                              </p>
+                            </div>
+                          )}
+                          
+                          <div className="text-xs text-warmgray-400">
+                            申请时间：{formatDateTime(request.createdAt)}
+                          </div>
                         </div>
-                        <span className={`px-2 py-0.5 rounded-full text-xs flex items-center gap-1 ${status.className}`}>
-                          {status.icon}
-                          {status.text}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm text-warmgray-500 mb-2">
-                        <Calendar size={14} />
-                        <span>{request.preferredDate}</span>
-                        <Clock size={14} />
-                        <span>{request.preferredTime}</span>
-                      </div>
-                      {request.notes && (
-                        <p className="text-sm text-warmgray-600 mb-2">{request.notes}</p>
                       )}
-                      {request.status === 'approved' && request.meetingUrl && (
-                        <a
-                          href={request.meetingUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="block w-full text-center py-2 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600 transition-colors"
-                        >
-                          进入会议
-                        </a>
-                      )}
-                      {request.status === 'rejected' && request.rejectionReason && (
-                        <div className="flex items-start gap-2 p-2 bg-red-50 rounded-lg text-sm text-red-600">
-                          <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
-                          <span>{request.rejectionReason}</span>
-                        </div>
-                      )}
-                      <p className="text-xs text-warmgray-400 mt-2">
-                        申请时间：{formatDateTime(request.createdAt)}
-                      </p>
                     </div>
                   );
                 })}
@@ -458,6 +577,28 @@ const ReportsPage = () => {
                   </div>
                 </div>
                 <span className="tag tag-success">坚持</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="lg:col-span-1">
+          <div className="card">
+            <h3 className="font-semibold text-warmgray-800 mb-4">📊 快速统计</h3>
+            <div className="space-y-4">
+              <div className="text-center p-4 bg-primary-50 rounded-xl">
+                <p className="text-3xl font-bold text-primary-600 font-mono">{reports.length}</p>
+                <p className="text-sm text-warmgray-500 mt-1">总报告数</p>
+              </div>
+              <div className="text-center p-4 bg-accent-50 rounded-xl">
+                <p className="text-3xl font-bold text-accent-600 font-mono">{reviewRequests.length}</p>
+                <p className="text-sm text-warmgray-500 mt-1">复盘申请</p>
+              </div>
+              <div className="text-center p-4 bg-green-50 rounded-xl">
+                <p className="text-3xl font-bold text-green-600 font-mono">
+                  {reviewRequests.filter(r => r.status === 'completed').length}
+                </p>
+                <p className="text-sm text-warmgray-500 mt-1">已完成</p>
               </div>
             </div>
           </div>

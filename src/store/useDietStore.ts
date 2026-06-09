@@ -9,6 +9,7 @@ import { useNotificationStore } from '@/store/useNotificationStore';
 interface DietState {
   records: DietRecord[];
   shoppingList: ShoppingItem[];
+  showCompletedItems: boolean;
   addRecord: (data: Omit<DietRecord, 'id' | 'userId' | 'calorieRange' | 'isHighRisk' | 'riskReason' | 'alternativeRecipe' | 'createdAt'>) => { record: DietRecord; wasHighRisk: boolean };
   toggleShoppingItem: (id: string) => void;
   addShoppingItem: (name: string, quantity: string, category: string, recipeId?: string) => void;
@@ -16,9 +17,15 @@ interface DietState {
   removeShoppingItem: (id: string) => void;
   markAsHighRisk: (recordId: string, reason: string, alternativeRecipe?: Recipe) => void;
   markAsLowRisk: (recordId: string) => void;
+  updateRiskLevel: (recordId: string, level: 'low' | 'medium' | 'high', reason?: string) => void;
+  updateNutritionistNote: (recordId: string, note: string) => void;
+  updateAlternativeRecipe: (recordId: string, recipe: Recipe) => void;
+  toggleShowCompletedItems: () => void;
+  clearCompletedItems: () => void;
   getTodayRecords: () => DietRecord[];
   getRecordsByDate: (date: string) => DietRecord[];
   getHighRiskRecords: () => DietRecord[];
+  getShoppingListByRecipe: () => Record<string, { recipe?: Recipe; items: ShoppingItem[] }>;
 }
 
 const getInitialRecords = (): DietRecord[] => {
@@ -34,17 +41,23 @@ const getInitialShoppingList = (): ShoppingItem[] => {
 export const useDietStore = create<DietState>((set, get) => ({
   records: getInitialRecords(),
   shoppingList: getInitialShoppingList(),
+  showCompletedItems: storage.get<boolean>('showCompletedItems', true),
   
   addRecord: (data) => {
     const riskCheck = checkHighRisk(data.description);
+    const riskLevel = riskCheck.isHighRisk ? 'high' as const : 'low' as const;
+    const riskModifiedBy = riskCheck.isHighRisk ? 'auto' as const : undefined;
     const newRecord: DietRecord = {
       ...data,
       id: generateId('diet'),
       userId: 'user-001',
       calorieRange: estimateCalorieRange(data.description),
       isHighRisk: riskCheck.isHighRisk,
+      riskLevel,
       riskReason: riskCheck.reason || undefined,
       alternativeRecipe: riskCheck.recipe,
+      riskModifiedBy,
+      riskModifiedAt: riskCheck.isHighRisk ? getTodayISO() : undefined,
       createdAt: getTodayISO(),
     };
     
@@ -146,7 +159,15 @@ export const useDietStore = create<DietState>((set, get) => ({
   markAsHighRisk: (recordId, reason, alternativeRecipe) => set((state) => {
     const updated = state.records.map(record =>
       record.id === recordId
-        ? { ...record, isHighRisk: true, riskReason: reason, alternativeRecipe }
+        ? { 
+            ...record, 
+            isHighRisk: true, 
+            riskLevel: 'high' as const,
+            riskReason: reason, 
+            alternativeRecipe,
+            riskModifiedBy: 'nutritionist' as const,
+            riskModifiedAt: getTodayISO(),
+          }
         : record
     );
     storage.set('dietRecords', updated);
@@ -168,11 +189,80 @@ export const useDietStore = create<DietState>((set, get) => ({
   markAsLowRisk: (recordId) => set((state) => {
     const updated = state.records.map(record =>
       record.id === recordId
-        ? { ...record, isHighRisk: false, riskReason: undefined, alternativeRecipe: undefined }
+        ? { 
+            ...record, 
+            isHighRisk: false, 
+            riskLevel: 'low' as const,
+            riskReason: undefined, 
+            alternativeRecipe: undefined,
+            riskModifiedBy: 'nutritionist' as const,
+            riskModifiedAt: getTodayISO(),
+          }
         : record
     );
     storage.set('dietRecords', updated);
     return { records: updated };
+  }),
+  
+  updateRiskLevel: (recordId, level, reason) => set((state) => {
+    const updated = state.records.map(record =>
+      record.id === recordId
+        ? {
+            ...record,
+            isHighRisk: level === 'high' || level === 'medium',
+            riskLevel: level,
+            riskReason: reason || record.riskReason,
+            riskModifiedBy: 'nutritionist' as const,
+            riskModifiedAt: getTodayISO(),
+          }
+        : record
+    );
+    storage.set('dietRecords', updated);
+    
+    const record = updated.find(r => r.id === recordId);
+    if (record && level === 'high') {
+      const { addNotification } = useNotificationStore.getState();
+      addNotification({
+        type: 'high_risk',
+        title: '营养师调整风险等级',
+        content: `营养师将您的「${record.description}」风险等级调整为${level === 'high' ? '高风险' : level === 'medium' ? '中风险' : '低风险'}，${reason || '请注意饮食调整。'}`,
+        relatedRecordId: recordId,
+      });
+    }
+    
+    return { records: updated };
+  }),
+  
+  updateNutritionistNote: (recordId, note) => set((state) => {
+    const updated = state.records.map(record =>
+      record.id === recordId
+        ? { ...record, nutritionistNote: note }
+        : record
+    );
+    storage.set('dietRecords', updated);
+    return { records: updated };
+  }),
+  
+  updateAlternativeRecipe: (recordId, recipe) => set((state) => {
+    const updated = state.records.map(record =>
+      record.id === recordId
+        ? { ...record, alternativeRecipe: recipe }
+        : record
+    );
+    storage.set('dietRecords', updated);
+    return { records: updated };
+  }),
+  
+  toggleShowCompletedItems: () => set((state) => {
+    const newValue = !state.showCompletedItems;
+    storage.set('showCompletedItems', newValue);
+    return { showCompletedItems: newValue };
+  }),
+  
+  clearCompletedItems: () => set((state) => {
+    const updated = state.shoppingList.filter(item => !item.checked);
+    storage.set('shoppingList', updated);
+    return { shoppingList: updated };
   }),
   
   getTodayRecords: () => {
@@ -186,5 +276,24 @@ export const useDietStore = create<DietState>((set, get) => ({
   
   getHighRiskRecords: () => {
     return get().records.filter(r => r.isHighRisk);
+  },
+  
+  getShoppingListByRecipe: () => {
+    const { shoppingList, records } = get();
+    const grouped: Record<string, { recipe?: Recipe; items: ShoppingItem[] }> = {};
+    
+    shoppingList.forEach(item => {
+      const key = item.recipeId || 'uncategorized';
+      if (!grouped[key]) {
+        const record = records.find(r => r.alternativeRecipe?.id === item.recipeId);
+        grouped[key] = {
+          recipe: record?.alternativeRecipe,
+          items: [],
+        };
+      }
+      grouped[key].items.push(item);
+    });
+    
+    return grouped;
   },
 }));

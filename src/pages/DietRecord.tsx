@@ -11,6 +11,12 @@ import {
   Info,
   CheckCircle,
   ShoppingBag,
+  Edit3,
+  Save,
+  ChevronDown,
+  ChevronUp,
+  MessageSquare,
+  Gauge,
 } from 'lucide-react';
 import { useDietStore } from '@/store/useDietStore';
 import { getMealLabel, getMealEmoji, getToday, formatDateTime } from '@/utils/date';
@@ -22,13 +28,35 @@ import { useLocation } from 'react-router-dom';
 const mealTypes: Array<'breakfast' | 'lunch' | 'dinner' | 'snack'> = ['breakfast', 'lunch', 'dinner', 'snack'];
 
 const DietRecordPage = () => {
-  const { records, shoppingList, addRecord, toggleShoppingItem, removeShoppingItem, addRecipeIngredients } = useDietStore();
+  const { 
+    records, 
+    shoppingList, 
+    showCompletedItems,
+    addRecord, 
+    toggleShoppingItem, 
+    removeShoppingItem, 
+    addRecipeIngredients,
+    updateRiskLevel,
+    updateNutritionistNote,
+    updateAlternativeRecipe,
+    toggleShowCompletedItems,
+    clearCompletedItems,
+    getShoppingListByRecipe,
+  } = useDietStore();
   const location = useLocation();
   const [selectedDate, setSelectedDate] = useState(getToday());
   const [showAddModal, setShowAddModal] = useState(false);
   const [showShoppingList, setShowShoppingList] = useState(false);
   const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [expandedRecipeId, setExpandedRecipeId] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [editingRecordId, setEditingRecordId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<{
+    riskLevel: 'low' | 'medium' | 'high';
+    riskReason: string;
+    nutritionistNote: string;
+    recipe: Recipe;
+  } | null>(null);
   const [newMeal, setNewMeal] = useState<{
     mealType: 'breakfast' | 'lunch' | 'dinner' | 'snack';
     description: string;
@@ -47,6 +75,7 @@ const DietRecordPage = () => {
       if (record) {
         setSelectedDate(record.date);
         setActiveTab(record.date === getToday() ? 'today' : 'history');
+        setExpandedRecipeId(record.id);
         setTimeout(() => {
           const element = document.getElementById(`record-${location.state.highlightId}`);
           if (element) {
@@ -112,12 +141,102 @@ const DietRecordPage = () => {
     setNewMeal({ ...newMeal, photoUrl });
   };
 
+  const startEditing = (record: DietRecord) => {
+    setEditingRecordId(record.id);
+    setEditForm({
+      riskLevel: record.riskLevel || (record.isHighRisk ? 'high' : 'low'),
+      riskReason: record.riskReason || '',
+      nutritionistNote: record.nutritionistNote || '',
+      recipe: record.alternativeRecipe || {
+        id: generateId('recipe'),
+        name: '',
+        ingredients: [],
+        calories: 0,
+        instructions: '',
+      },
+    });
+  };
+
+  const cancelEditing = () => {
+    setEditingRecordId(null);
+    setEditForm(null);
+  };
+
+  const saveEditing = (recordId: string) => {
+    if (!editForm) return;
+    
+    updateRiskLevel(recordId, editForm.riskLevel, editForm.riskReason);
+    updateNutritionistNote(recordId, editForm.nutritionistNote);
+    if (editForm.recipe.name) {
+      updateAlternativeRecipe(recordId, editForm.recipe);
+    }
+    
+    setEditingRecordId(null);
+    setEditForm(null);
+    showSuccess('已保存营养师批注和风险等级调整');
+  };
+
+  const addRecipeIngredient = () => {
+    if (!editForm) return;
+    setEditForm({
+      ...editForm,
+      recipe: {
+        ...editForm.recipe,
+        ingredients: [...editForm.recipe.ingredients, { name: '', amount: '' }],
+      },
+    });
+  };
+
+  const removeRecipeIngredient = (index: number) => {
+    if (!editForm) return;
+    setEditForm({
+      ...editForm,
+      recipe: {
+        ...editForm.recipe,
+        ingredients: editForm.recipe.ingredients.filter((_, i) => i !== index),
+      },
+    });
+  };
+
+  const updateRecipeIngredient = (index: number, field: 'name' | 'amount', value: string) => {
+    if (!editForm) return;
+    const newIngredients = [...editForm.recipe.ingredients];
+    newIngredients[index] = { ...newIngredients[index], [field]: value };
+    setEditForm({
+      ...editForm,
+      recipe: {
+        ...editForm.recipe,
+        ingredients: newIngredients,
+      },
+    });
+  };
+
   const shoppingCategories = Array.from(new Set(shoppingList.map(item => item.category)));
+  const shoppingByRecipe = getShoppingListByRecipe();
 
   const getStatusColor = (record: DietRecord) => {
-    if (record.isHighRisk) return 'border-red-400 bg-red-50';
+    if (record.riskLevel === 'high') return 'border-red-400 bg-red-50';
+    if (record.riskLevel === 'medium') return 'border-orange-400 bg-orange-50';
     if (record.alternativeRecipe) return 'border-primary-400 bg-primary-50';
     return 'border-cream-200 bg-white';
+  };
+
+  const getRiskLevelLabel = (level?: 'low' | 'medium' | 'high') => {
+    switch (level) {
+      case 'high': return { label: '高风险', className: 'tag-danger' };
+      case 'medium': return { label: '中风险', className: 'tag-warning' };
+      case 'low': return { label: '低风险', className: 'tag-success' };
+      default: return null;
+    }
+  };
+
+  const getRiskLevelColor = (level?: 'low' | 'medium' | 'high') => {
+    switch (level) {
+      case 'high': return 'text-red-600 bg-red-100';
+      case 'medium': return 'text-orange-600 bg-orange-100';
+      case 'low': return 'text-green-600 bg-green-100';
+      default: return 'text-warmgray-600 bg-warmgray-100';
+    }
   };
 
   return (
@@ -283,12 +402,28 @@ const DietRecordPage = () => {
                                   </p>
                                 </div>
                                 <div className="flex items-center gap-1">
-                                  {record.isHighRisk && (
-                                    <span className="tag tag-danger flex items-center gap-1">
+                                  {getRiskLevelLabel(record.riskLevel) && (
+                                    <span className={`tag ${getRiskLevelLabel(record.riskLevel)!.className} flex items-center gap-1`}>
                                       <AlertTriangle size={12} />
-                                      高风险
+                                      {getRiskLevelLabel(record.riskLevel)!.label}
                                     </span>
                                   )}
+                                  {record.riskModifiedBy === 'nutritionist' && (
+                                    <span className="tag tag-info flex items-center gap-1">
+                                      <span>👨‍⚕️</span>
+                                      营养师已审核
+                                    </span>
+                                  )}
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      startEditing(record);
+                                    }}
+                                    className="p-1.5 hover:bg-white/50 rounded-lg transition-colors"
+                                    title="营养师处理"
+                                  >
+                                    <Edit3 size={14} className="text-warmgray-500" />
+                                  </button>
                                 </div>
                               </div>
                               
@@ -301,49 +436,238 @@ const DietRecordPage = () => {
                                 </div>
                               )}
                               
+                              {record.nutritionistNote && (
+                                <div className="mt-3 p-3 bg-blue-100 rounded-xl">
+                                  <p className="text-sm text-blue-700 flex items-start gap-2">
+                                    <MessageSquare size={16} className="flex-shrink-0 mt-0.5" />
+                                    <span>
+                                      <strong>营养师批注：</strong>{record.nutritionistNote}
+                                    </span>
+                                  </p>
+                                </div>
+                              )}
+                              
                               {record.alternativeRecipe && (
-                                <div className="mt-3 p-3 bg-primary-100 rounded-xl">
-                                  <div className="flex items-center justify-between mb-2">
+                                <div className="mt-3">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setExpandedRecipeId(expandedRecipeId === record.id ? null : record.id);
+                                    }}
+                                    className="w-full p-3 bg-primary-100 rounded-xl flex items-center justify-between hover:bg-primary-200 transition-colors"
+                                  >
                                     <div className="flex items-center gap-2">
                                       <ChefHat size={16} className="text-primary-600" />
-                                      <p className="font-medium text-primary-700">推荐替代食谱</p>
+                                      <p className="font-medium text-primary-700">推荐替代食谱：{record.alternativeRecipe.name}</p>
                                     </div>
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleAddRecipeToShopping(record.alternativeRecipe!, record.id);
-                                      }}
-                                      className="flex items-center gap-1 px-3 py-1.5 bg-white text-primary-600 rounded-lg text-sm font-medium hover:bg-primary-50 transition-colors shadow-sm"
-                                    >
-                                      <ShoppingBag size={14} />
-                                      加入购物清单
-                                    </button>
-                                  </div>
-                                  <p className="font-medium text-warmgray-800">{record.alternativeRecipe.name}</p>
-                                  <p className="text-sm text-warmgray-500 mt-1">
-                                    {record.alternativeRecipe.calories} kcal
-                                  </p>
-                                  <div className="mt-2">
-                                    <p className="text-xs text-primary-600 mb-1">所需食材：</p>
-                                    <div className="flex flex-wrap gap-1.5">
-                                      {record.alternativeRecipe.ingredients.slice(0, 5).map((ing, idx) => (
-                                        <span key={idx} className="px-2 py-0.5 bg-white rounded-full text-xs text-warmgray-600">
-                                          {ing.name}
-                                        </span>
-                                      ))}
-                                      {record.alternativeRecipe.ingredients.length > 5 && (
-                                        <span className="px-2 py-0.5 bg-white rounded-full text-xs text-warmgray-500">
-                                          +{record.alternativeRecipe.ingredients.length - 5}种
-                                        </span>
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleAddRecipeToShopping(record.alternativeRecipe!, record.id);
+                                        }}
+                                        className="flex items-center gap-1 px-3 py-1.5 bg-white text-primary-600 rounded-lg text-sm font-medium hover:bg-primary-50 transition-colors shadow-sm"
+                                      >
+                                        <ShoppingBag size={14} />
+                                        加入购物清单
+                                      </button>
+                                      {expandedRecipeId === record.id ? (
+                                        <ChevronUp size={18} className="text-primary-600" />
+                                      ) : (
+                                        <ChevronDown size={18} className="text-primary-600" />
                                       )}
                                     </div>
-                                  </div>
+                                  </button>
+                                  
+                                  {expandedRecipeId === record.id && (
+                                    <div className="p-4 bg-primary-50 rounded-b-xl border-x border-b border-primary-200 animate-fade-in">
+                                      <div className="flex items-center justify-between mb-3">
+                                        <p className="font-medium text-warmgray-800">{record.alternativeRecipe.name}</p>
+                                        <span className="text-sm text-primary-600 font-medium">
+                                          {record.alternativeRecipe.calories} kcal
+                                        </span>
+                                      </div>
+                                      <div className="mb-3">
+                                        <p className="text-sm text-warmgray-600 mb-1">所需食材：</p>
+                                        <div className="flex flex-wrap gap-1.5">
+                                          {record.alternativeRecipe.ingredients.map((ing, idx) => (
+                                            <span key={idx} className="px-2 py-0.5 bg-white rounded-full text-xs text-warmgray-600">
+                                              {ing.name} {ing.amount}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      </div>
+                                      {record.alternativeRecipe.instructions && (
+                                        <div>
+                                          <p className="text-sm text-warmgray-600 mb-1">制作步骤：</p>
+                                          <p className="text-sm text-warmgray-700">{record.alternativeRecipe.instructions}</p>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
                               )}
                               
                               <p className="text-xs text-warmgray-400 mt-2">
                                 {formatDateTime(record.createdAt)}
                               </p>
+                              
+                              {editingRecordId === record.id && editForm && (
+                                <div className="mt-4 p-4 bg-white rounded-xl border-2 border-primary-200 animate-fade-in">
+                                  <div className="flex items-center justify-between mb-4">
+                                    <h4 className="font-semibold text-warmgray-800 flex items-center gap-2">
+                                      <Gauge size={18} className="text-primary-500" />
+                                      营养师处理
+                                    </h4>
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          saveEditing(record.id);
+                                        }}
+                                        className="flex items-center gap-1 px-3 py-1.5 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600 transition-colors"
+                                      >
+                                        <Save size={14} />
+                                        保存
+                                      </button>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          cancelEditing();
+                                        }}
+                                        className="flex items-center gap-1 px-3 py-1.5 bg-warmgray-100 text-warmgray-600 rounded-lg text-sm font-medium hover:bg-warmgray-200 transition-colors"
+                                      >
+                                        <X size={14} />
+                                        取消
+                                      </button>
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="space-y-4">
+                                    <div>
+                                      <label className="block text-sm font-medium text-warmgray-700 mb-2">
+                                        风险等级
+                                      </label>
+                                      <div className="grid grid-cols-3 gap-2">
+                                        {(['low', 'medium', 'high'] as const).map((level) => (
+                                          <button
+                                            key={level}
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setEditForm({ ...editForm, riskLevel: level });
+                                            }}
+                                            className={`p-2 rounded-lg text-sm font-medium transition-all ${
+                                              editForm.riskLevel === level
+                                                ? getRiskLevelColor(level) + ' ring-2 ring-offset-2 ring-opacity-50'
+                                                : 'bg-warmgray-50 text-warmgray-600 hover:bg-warmgray-100'
+                                            }`}
+                                          >
+                                            {level === 'low' ? '低风险' : level === 'medium' ? '中风险' : '高风险'}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                    
+                                    <div>
+                                      <label className="block text-sm font-medium text-warmgray-700 mb-2">
+                                        风险原因
+                                      </label>
+                                      <textarea
+                                        onClick={(e) => e.stopPropagation()}
+                                        value={editForm.riskReason}
+                                        onChange={(e) => setEditForm({ ...editForm, riskReason: e.target.value })}
+                                        placeholder="请输入风险原因..."
+                                        className="input-field w-full h-20 resize-none"
+                                      />
+                                    </div>
+                                    
+                                    <div>
+                                      <label className="block text-sm font-medium text-warmgray-700 mb-2">
+                                        营养师批注
+                                      </label>
+                                      <textarea
+                                        onClick={(e) => e.stopPropagation()}
+                                        value={editForm.nutritionistNote}
+                                        onChange={(e) => setEditForm({ ...editForm, nutritionistNote: e.target.value })}
+                                        placeholder="请输入营养师批注..."
+                                        className="input-field w-full h-20 resize-none"
+                                      />
+                                    </div>
+                                    
+                                    <div>
+                                      <div className="flex items-center justify-between mb-2">
+                                        <label className="block text-sm font-medium text-warmgray-700">
+                                          替代食谱
+                                        </label>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            addRecipeIngredient();
+                                          }}
+                                          className="text-xs text-primary-600 hover:text-primary-700 font-medium"
+                                        >
+                                          + 添加食材
+                                        </button>
+                                      </div>
+                                      <div className="space-y-2">
+                                        <input
+                                          onClick={(e) => e.stopPropagation()}
+                                          value={editForm.recipe.name}
+                                          onChange={(e) => setEditForm({ ...editForm, recipe: { ...editForm.recipe, name: e.target.value } })}
+                                          placeholder="食谱名称"
+                                          className="input-field w-full"
+                                        />
+                                        <div className="grid grid-cols-2 gap-2">
+                                          <input
+                                            onClick={(e) => e.stopPropagation()}
+                                            type="number"
+                                            value={editForm.recipe.calories || ''}
+                                            onChange={(e) => setEditForm({ ...editForm, recipe: { ...editForm.recipe, calories: parseInt(e.target.value) || 0 } })}
+                                            placeholder="热量 (kcal)"
+                                            className="input-field"
+                                          />
+                                        </div>
+                                        <div className="space-y-2">
+                                          {editForm.recipe.ingredients.map((ing, idx) => (
+                                            <div key={idx} className="flex gap-2">
+                                              <input
+                                                onClick={(e) => e.stopPropagation()}
+                                                value={ing.name}
+                                                onChange={(e) => updateRecipeIngredient(idx, 'name', e.target.value)}
+                                                placeholder="食材名称"
+                                                className="input-field flex-1"
+                                              />
+                                              <input
+                                                onClick={(e) => e.stopPropagation()}
+                                                value={ing.amount}
+                                                onChange={(e) => updateRecipeIngredient(idx, 'amount', e.target.value)}
+                                                placeholder="用量"
+                                                className="input-field w-28"
+                                              />
+                                              <button
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  removeRecipeIngredient(idx);
+                                                }}
+                                                className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                              >
+                                                <Trash2 size={16} />
+                                              </button>
+                                            </div>
+                                          ))}
+                                        </div>
+                                        <textarea
+                                          onClick={(e) => e.stopPropagation()}
+                                          value={editForm.recipe.instructions}
+                                          onChange={(e) => setEditForm({ ...editForm, recipe: { ...editForm.recipe, instructions: e.target.value } })}
+                                          placeholder="制作步骤..."
+                                          className="input-field w-full h-20 resize-none"
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -379,8 +703,17 @@ const DietRecordPage = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        {record.isHighRisk && (
-                          <AlertTriangle size={20} className="text-red-500" />
+                        {getRiskLevelLabel(record.riskLevel) && (
+                          <span className={`tag ${getRiskLevelLabel(record.riskLevel)!.className} flex items-center gap-1`}>
+                            <AlertTriangle size={12} />
+                            {getRiskLevelLabel(record.riskLevel)!.label}
+                          </span>
+                        )}
+                        {record.riskModifiedBy === 'nutritionist' && (
+                          <span className="tag tag-info flex items-center gap-1">
+                            <span>👨‍⚕️</span>
+                            已审核
+                          </span>
                         )}
                         {record.alternativeRecipe && (
                           <button
@@ -394,6 +727,16 @@ const DietRecordPage = () => {
                             <ShoppingBag size={16} />
                           </button>
                         )}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            startEditing(record);
+                          }}
+                          className="p-2 hover:bg-warmgray-100 rounded-lg transition-colors"
+                          title="营养师处理"
+                        >
+                          <Edit3 size={16} className="text-warmgray-500" />
+                        </button>
                       </div>
                     </div>
                     {record.isHighRisk && record.riskReason && (
@@ -404,12 +747,219 @@ const DietRecordPage = () => {
                         </p>
                       </div>
                     )}
-                    {record.alternativeRecipe && (
-                      <div className="mt-3 p-3 bg-primary-50 rounded-xl">
-                        <p className="text-sm text-primary-700">
-                          <span className="font-medium">替代食谱：</span>
-                          {record.alternativeRecipe.name} ({record.alternativeRecipe.calories} kcal)
+                    {record.nutritionistNote && (
+                      <div className="mt-3 p-3 bg-blue-50 rounded-xl">
+                        <p className="text-sm text-blue-600 flex items-start gap-2">
+                          <MessageSquare size={14} className="flex-shrink-0 mt-0.5" />
+                          <span>
+                            <strong>营养师批注：</strong>{record.nutritionistNote}
+                          </span>
                         </p>
+                      </div>
+                    )}
+                    {record.alternativeRecipe && (
+                      <div className="mt-3">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setExpandedRecipeId(expandedRecipeId === record.id ? null : record.id);
+                          }}
+                          className="w-full p-3 bg-primary-50 rounded-xl flex items-center justify-between hover:bg-primary-100 transition-colors"
+                        >
+                          <div className="flex items-center gap-2">
+                            <ChefHat size={16} className="text-primary-600" />
+                            <p className="font-medium text-primary-700">替代食谱：{record.alternativeRecipe.name}</p>
+                          </div>
+                          {expandedRecipeId === record.id ? (
+                            <ChevronUp size={18} className="text-primary-600" />
+                          ) : (
+                            <ChevronDown size={18} className="text-primary-600" />
+                          )}
+                        </button>
+                        
+                        {expandedRecipeId === record.id && (
+                          <div className="p-4 bg-primary-50/50 rounded-b-xl border-x border-b border-primary-200 animate-fade-in">
+                            <div className="flex items-center justify-between mb-3">
+                              <p className="font-medium text-warmgray-800">{record.alternativeRecipe.name}</p>
+                              <span className="text-sm text-primary-600 font-medium">
+                                {record.alternativeRecipe.calories} kcal
+                              </span>
+                            </div>
+                            <div className="mb-3">
+                              <p className="text-sm text-warmgray-600 mb-1">所需食材：</p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {record.alternativeRecipe.ingredients.map((ing, idx) => (
+                                  <span key={idx} className="px-2 py-0.5 bg-white rounded-full text-xs text-warmgray-600">
+                                    {ing.name} {ing.amount}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                            {record.alternativeRecipe.instructions && (
+                              <div>
+                                <p className="text-sm text-warmgray-600 mb-1">制作步骤：</p>
+                                <p className="text-sm text-warmgray-700">{record.alternativeRecipe.instructions}</p>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    
+                    {editingRecordId === record.id && editForm && (
+                      <div className="mt-4 p-4 bg-white rounded-xl border-2 border-primary-200 animate-fade-in">
+                        <div className="flex items-center justify-between mb-4">
+                          <h4 className="font-semibold text-warmgray-800 flex items-center gap-2">
+                            <Gauge size={18} className="text-primary-500" />
+                            营养师处理
+                          </h4>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                saveEditing(record.id);
+                              }}
+                              className="flex items-center gap-1 px-3 py-1.5 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600 transition-colors"
+                            >
+                              <Save size={14} />
+                              保存
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                cancelEditing();
+                              }}
+                              className="flex items-center gap-1 px-3 py-1.5 bg-warmgray-100 text-warmgray-600 rounded-lg text-sm font-medium hover:bg-warmgray-200 transition-colors"
+                            >
+                              <X size={14} />
+                              取消
+                            </button>
+                          </div>
+                        </div>
+                        
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-sm font-medium text-warmgray-700 mb-2">
+                              风险等级
+                            </label>
+                            <div className="grid grid-cols-3 gap-2">
+                              {(['low', 'medium', 'high'] as const).map((level) => (
+                                <button
+                                  key={level}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setEditForm({ ...editForm, riskLevel: level });
+                                  }}
+                                  className={`p-2 rounded-lg text-sm font-medium transition-all ${
+                                    editForm.riskLevel === level
+                                      ? getRiskLevelColor(level) + ' ring-2 ring-offset-2 ring-opacity-50'
+                                      : 'bg-warmgray-50 text-warmgray-600 hover:bg-warmgray-100'
+                                  }`}
+                                >
+                                  {level === 'low' ? '低风险' : level === 'medium' ? '中风险' : '高风险'}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-medium text-warmgray-700 mb-2">
+                              风险原因
+                            </label>
+                            <textarea
+                              onClick={(e) => e.stopPropagation()}
+                              value={editForm.riskReason}
+                              onChange={(e) => setEditForm({ ...editForm, riskReason: e.target.value })}
+                              placeholder="请输入风险原因..."
+                              className="input-field w-full h-20 resize-none"
+                            />
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-medium text-warmgray-700 mb-2">
+                              营养师批注
+                            </label>
+                            <textarea
+                              onClick={(e) => e.stopPropagation()}
+                              value={editForm.nutritionistNote}
+                              onChange={(e) => setEditForm({ ...editForm, nutritionistNote: e.target.value })}
+                              placeholder="请输入营养师批注..."
+                              className="input-field w-full h-20 resize-none"
+                            />
+                          </div>
+                          
+                          <div>
+                            <div className="flex items-center justify-between mb-2">
+                              <label className="block text-sm font-medium text-warmgray-700">
+                                替代食谱
+                              </label>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  addRecipeIngredient();
+                                }}
+                                className="text-xs text-primary-600 hover:text-primary-700 font-medium"
+                              >
+                                + 添加食材
+                              </button>
+                            </div>
+                            <div className="space-y-2">
+                              <input
+                                onClick={(e) => e.stopPropagation()}
+                                value={editForm.recipe.name}
+                                onChange={(e) => setEditForm({ ...editForm, recipe: { ...editForm.recipe, name: e.target.value } })}
+                                placeholder="食谱名称"
+                                className="input-field w-full"
+                              />
+                              <div className="grid grid-cols-2 gap-2">
+                                <input
+                                  onClick={(e) => e.stopPropagation()}
+                                  type="number"
+                                  value={editForm.recipe.calories || ''}
+                                  onChange={(e) => setEditForm({ ...editForm, recipe: { ...editForm.recipe, calories: parseInt(e.target.value) || 0 } })}
+                                  placeholder="热量 (kcal)"
+                                  className="input-field"
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                {editForm.recipe.ingredients.map((ing, idx) => (
+                                  <div key={idx} className="flex gap-2">
+                                    <input
+                                      onClick={(e) => e.stopPropagation()}
+                                      value={ing.name}
+                                      onChange={(e) => updateRecipeIngredient(idx, 'name', e.target.value)}
+                                      placeholder="食材名称"
+                                      className="input-field flex-1"
+                                    />
+                                    <input
+                                      onClick={(e) => e.stopPropagation()}
+                                      value={ing.amount}
+                                      onChange={(e) => updateRecipeIngredient(idx, 'amount', e.target.value)}
+                                      placeholder="用量"
+                                      className="input-field w-28"
+                                    />
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        removeRecipeIngredient(idx);
+                                      }}
+                                      className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                    >
+                                      <Trash2 size={16} />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                              <textarea
+                                onClick={(e) => e.stopPropagation()}
+                                value={editForm.recipe.instructions}
+                                onChange={(e) => setEditForm({ ...editForm, recipe: { ...editForm.recipe, instructions: e.target.value } })}
+                                placeholder="制作步骤..."
+                                className="input-field w-full h-20 resize-none"
+                              />
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -568,20 +1118,58 @@ const DietRecordPage = () => {
                 <ShoppingCart size={22} />
                 购物清单
               </h3>
-              <button
-                onClick={() => setShowShoppingList(false)}
-                className="p-2 hover:bg-cream-100 rounded-xl transition-colors"
-              >
-                <X size={20} />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={toggleShowCompletedItems}
+                  className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    showCompletedItems
+                      ? 'bg-primary-100 text-primary-600'
+                      : 'bg-warmgray-100 text-warmgray-600 hover:bg-warmgray-200'
+                  }`}
+                >
+                  {showCompletedItems ? '收起已买' : '显示已买'}
+                </button>
+                {shoppingList.filter(s => s.checked).length > 0 && (
+                  <button
+                    onClick={clearCompletedItems}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-red-50 text-red-600 rounded-lg text-sm font-medium hover:bg-red-100 transition-colors"
+                  >
+                    <Trash2 size={14} />
+                    清空已买
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowShoppingList(false)}
+                  className="p-2 hover:bg-cream-100 rounded-xl transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto scrollbar-thin space-y-4">
-              {shoppingCategories.map((category) => {
-                const items = shoppingList.filter(item => item.category === category);
+              {Object.entries(shoppingByRecipe).map(([recipeId, group]) => {
+                const items = showCompletedItems 
+                  ? group.items 
+                  : group.items.filter(item => !item.checked);
+                
+                if (items.length === 0) return null;
+                
                 return (
-                  <div key={category}>
-                    <h4 className="font-medium text-warmgray-600 mb-2 px-2">{category}</h4>
+                  <div key={recipeId}>
+                    {group.recipe ? (
+                      <div className="flex items-center gap-2 mb-2 px-2">
+                        <ChefHat size={16} className="text-primary-500" />
+                        <h4 className="font-medium text-primary-600">
+                          替代食谱：{group.recipe.name}
+                        </h4>
+                        <span className="text-xs text-warmgray-400">
+                          ({items.filter(i => !i.checked).length}/{group.items.length} 待购)
+                        </span>
+                      </div>
+                    ) : (
+                      <h4 className="font-medium text-warmgray-600 mb-2 px-2">其他食材</h4>
+                    )}
                     <div className="space-y-2">
                       {items.map((item) => (
                         <div
@@ -605,6 +1193,7 @@ const DietRecordPage = () => {
                               {item.name}
                             </span>
                             <span className="text-sm text-warmgray-400 ml-2">{item.quantity}</span>
+                            <span className="text-xs text-warmgray-400 ml-2">({item.category})</span>
                           </div>
                           <button
                             onClick={() => removeShoppingItem(item.id)}
@@ -619,7 +1208,7 @@ const DietRecordPage = () => {
                 );
               })}
               
-              {shoppingList.length === 0 && (
+              {shoppingList.filter(s => showCompletedItems || !s.checked).length === 0 && (
                 <div className="text-center py-12 text-warmgray-400">
                   <ShoppingCart size={40} className="mx-auto mb-2 opacity-50" />
                   <p>购物清单为空</p>
