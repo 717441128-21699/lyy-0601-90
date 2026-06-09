@@ -353,6 +353,11 @@ export const mockWeeklyReports: WeeklyReport[] = [
       '🏆 运动打卡率达到85%，小组排名第2',
       '💪 连续运动打卡7天，获得"运动达人"徽章',
     ],
+    improvements: [
+      '早餐蛋白质摄入略有不足',
+      '有2次高风险饮食记录',
+      '周末运动时长稍短',
+    ],
     generatedAt: getToday() + 'T09:00:00',
   },
   {
@@ -376,6 +381,11 @@ export const mockWeeklyReports: WeeklyReport[] = [
     highlights: [
       '📉 体重持续下降趋势',
       '✅ 饮食记录完整度高',
+    ],
+    improvements: [
+      '运动时长略低于目标',
+      '周末饮食控制稍松',
+      '称重记录不够规律',
     ],
     generatedAt: getDaysAgo(6) + 'T09:00:00',
   },

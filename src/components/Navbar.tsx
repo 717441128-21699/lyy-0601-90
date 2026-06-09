@@ -53,14 +53,22 @@ const Navbar = () => {
         navigate('/nutritionist', { state: { highlightNoteId: notif.relatedRecordId } });
         break;
       case 'report':
-        navigate('/reports', { state: { highlightReportId: notif.relatedRecordId } });
+        if (notif.relatedRecordId) {
+          if (notif.title.includes('复盘')) {
+            navigate('/reports', { state: { highlightReviewId: notif.relatedRecordId } });
+          } else {
+            navigate('/reports', { state: { highlightReportId: notif.relatedRecordId } });
+          }
+        } else {
+          navigate('/reports');
+        }
         break;
       case 'reminder':
         navigate('/diet');
         break;
       case 'system':
       default:
-        navigate('/notifications');
+        navigate('/dashboard', { state: { highlightNotification: true } });
         break;
     }
   };

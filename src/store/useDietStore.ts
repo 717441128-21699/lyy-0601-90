@@ -5,6 +5,7 @@ import { storage, generateId } from '@/utils/storage';
 import { getToday, getTodayISO } from '@/utils/date';
 import { estimateCalorieRange, checkHighRisk } from '@/utils/calories';
 import { useNotificationStore } from '@/store/useNotificationStore';
+import { useNoteStore } from '@/store/useNoteStore';
 
 interface DietState {
   records: DietRecord[];
@@ -26,6 +27,21 @@ interface DietState {
   getRecordsByDate: (date: string) => DietRecord[];
   getHighRiskRecords: () => DietRecord[];
   getShoppingListByRecipe: () => Record<string, { recipe?: Recipe; items: ShoppingItem[] }>;
+  getWeeklyRiskReview: () => {
+    totalHighRisk: number;
+    processedByNutritionist: number;
+    hasAlternativeRecipe: number;
+    addedToShoppingList: number;
+    shoppingCompleted: number;
+    records: Array<{
+      record: DietRecord;
+      isProcessed: boolean;
+      hasAlternativeRecipe: boolean;
+      isAddedToShoppingList: boolean;
+      shoppingCompleted: boolean;
+      shoppingProgress: number;
+    }>;
+  };
 }
 
 const getInitialRecords = (): DietRecord[] => {
@@ -220,14 +236,30 @@ export const useDietStore = create<DietState>((set, get) => ({
     storage.set('dietRecords', updated);
     
     const record = updated.find(r => r.id === recordId);
-    if (record && level === 'high') {
+    if (record) {
       const { addNotification } = useNotificationStore.getState();
-      addNotification({
-        type: 'high_risk',
-        title: '营养师调整风险等级',
-        content: `营养师将您的「${record.description}」风险等级调整为${level === 'high' ? '高风险' : level === 'medium' ? '中风险' : '低风险'}，${reason || '请注意饮食调整。'}`,
-        relatedRecordId: recordId,
+      const { upsertNoteForDietRecord } = useNoteStore.getState();
+      
+      const riskLevelLabel = level === 'high' ? '高风险' : level === 'medium' ? '中风险' : '低风险';
+      const noteContent = `营养师将您的「${record.description}」风险等级调整为${riskLevelLabel}${reason ? `，原因：${reason}` : '，请注意饮食调整。'}${record.alternativeRecipe ? `推荐替代食谱：${record.alternativeRecipe.name}。` : ''}${record.nutritionistNote ? `营养师批注：${record.nutritionistNote}` : ''}`;
+      
+      upsertNoteForDietRecord(recordId, {
+        content: noteContent,
+        isHighRisk: level === 'high' || level === 'medium',
+        relatedRecordType: 'diet',
+        nutritionistId: 'nutri-001',
+        nutritionistName: '李营养师',
+        nutritionistAvatar: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=100&h=100',
       });
+      
+      if (level === 'high') {
+        addNotification({
+          type: 'high_risk',
+          title: '营养师调整风险等级',
+          content: `营养师将您的「${record.description}」风险等级调整为${riskLevelLabel}，${reason || '请注意饮食调整。'}`,
+          relatedRecordId: recordId,
+        });
+      }
     }
     
     return { records: updated };
@@ -236,20 +268,56 @@ export const useDietStore = create<DietState>((set, get) => ({
   updateNutritionistNote: (recordId, note) => set((state) => {
     const updated = state.records.map(record =>
       record.id === recordId
-        ? { ...record, nutritionistNote: note }
+        ? { ...record, nutritionistNote: note, riskModifiedAt: getTodayISO() }
         : record
     );
     storage.set('dietRecords', updated);
+    
+    const record = updated.find(r => r.id === recordId);
+    if (record) {
+      const { upsertNoteForDietRecord } = useNoteStore.getState();
+      
+      const riskLevelLabel = record.riskLevel === 'high' ? '高风险' : record.riskLevel === 'medium' ? '中风险' : '低风险';
+      const noteContent = `营养师对您的「${record.description}」补充批注：${note}。当前风险等级：${riskLevelLabel}。${record.alternativeRecipe ? `推荐替代食谱：${record.alternativeRecipe.name}。` : ''}`;
+      
+      upsertNoteForDietRecord(recordId, {
+        content: noteContent,
+        isHighRisk: record.isHighRisk,
+        relatedRecordType: 'diet',
+        nutritionistId: 'nutri-001',
+        nutritionistName: '李营养师',
+        nutritionistAvatar: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=100&h=100',
+      });
+    }
+    
     return { records: updated };
   }),
   
   updateAlternativeRecipe: (recordId, recipe) => set((state) => {
     const updated = state.records.map(record =>
       record.id === recordId
-        ? { ...record, alternativeRecipe: recipe }
+        ? { ...record, alternativeRecipe: recipe, riskModifiedAt: getTodayISO() }
         : record
     );
     storage.set('dietRecords', updated);
+    
+    const record = updated.find(r => r.id === recordId);
+    if (record) {
+      const { upsertNoteForDietRecord } = useNoteStore.getState();
+      
+      const riskLevelLabel = record.riskLevel === 'high' ? '高风险' : record.riskLevel === 'medium' ? '中风险' : '低风险';
+      const noteContent = `营养师为您的「${record.description}」更新了替代食谱：${recipe.name}（${recipe.calories} kcal）。当前风险等级：${riskLevelLabel}。${record.nutritionistNote ? `营养师批注：${record.nutritionistNote}` : ''}`;
+      
+      upsertNoteForDietRecord(recordId, {
+        content: noteContent,
+        isHighRisk: record.isHighRisk,
+        relatedRecordType: 'diet',
+        nutritionistId: 'nutri-001',
+        nutritionistName: '李营养师',
+        nutritionistAvatar: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=100&h=100',
+      });
+    }
+    
     return { records: updated };
   }),
   
@@ -295,5 +363,55 @@ export const useDietStore = create<DietState>((set, get) => ({
     });
     
     return grouped;
+  },
+  
+  getWeeklyRiskReview: () => {
+    const { records, shoppingList } = get();
+    const today = new Date();
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() - 6);
+    
+    const highRiskRecords = records.filter(r => {
+      const recordDate = new Date(r.date);
+      return recordDate >= weekStart && recordDate <= today && r.isHighRisk;
+    });
+    
+    const reviewRecords = highRiskRecords.map(record => {
+      const isProcessed = record.riskModifiedBy === 'nutritionist';
+      const hasAlternativeRecipe = !!record.alternativeRecipe;
+      
+      let isAddedToShoppingList = false;
+      let shoppingCompleted = false;
+      let shoppingProgress = 0;
+      
+      if (record.alternativeRecipe) {
+        const recipeItems = shoppingList.filter(item => item.recipeId === record.alternativeRecipe?.id);
+        isAddedToShoppingList = recipeItems.length > 0;
+        
+        if (recipeItems.length > 0) {
+          const checkedItems = recipeItems.filter(item => item.checked).length;
+          shoppingProgress = Math.round((checkedItems / recipeItems.length) * 100);
+          shoppingCompleted = checkedItems === recipeItems.length;
+        }
+      }
+      
+      return {
+        record,
+        isProcessed,
+        hasAlternativeRecipe,
+        isAddedToShoppingList,
+        shoppingCompleted,
+        shoppingProgress,
+      };
+    });
+    
+    return {
+      totalHighRisk: highRiskRecords.length,
+      processedByNutritionist: reviewRecords.filter(r => r.isProcessed).length,
+      hasAlternativeRecipe: reviewRecords.filter(r => r.hasAlternativeRecipe).length,
+      addedToShoppingList: reviewRecords.filter(r => r.isAddedToShoppingList).length,
+      shoppingCompleted: reviewRecords.filter(r => r.shoppingCompleted).length,
+      records: reviewRecords,
+    };
   },
 }));

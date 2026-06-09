@@ -17,6 +17,7 @@ import { useNoteStore } from '@/store/useNoteStore';
 import { useDietStore } from '@/store/useDietStore';
 import { formatDateTime, getMealLabel } from '@/utils/date';
 import { useLocation } from 'react-router-dom';
+import RiskReviewPanel from '@/components/RiskReviewPanel';
 
 const NutritionistNotesPage = () => {
   const { notes, todos, replyToNote, toggleTodo, getUnreadCount, getHighRiskCount } = useNoteStore();
@@ -198,6 +199,8 @@ const NutritionistNotesPage = () => {
               </div>
             </div>
           </div>
+
+          <RiskReviewPanel />
 
           <div className="space-y-4">
             {filteredNotes.length === 0 ? (

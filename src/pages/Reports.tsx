@@ -21,11 +21,14 @@ import {
 } from 'lucide-react';
 import { useNotificationStore } from '@/store/useNotificationStore';
 import { useUserStore } from '@/store/useUserStore';
+import { useDietStore } from '@/store/useDietStore';
+import { useExerciseStore } from '@/store/useExerciseStore';
+import { useBodyStore } from '@/store/useBodyStore';
 import { formatDate, formatDateTime, getToday } from '@/utils/date';
 import { useLocation } from 'react-router-dom';
 
 const ReportsPage = () => {
-  const { reports, reviewRequests, createReviewRequest, addNotification } = useNotificationStore();
+  const { reports, reviewRequests, createReviewRequest, addNotification, addReport } = useNotificationStore();
   const { user } = useUserStore();
   const location = useLocation();
   const [showReviewModal, setShowReviewModal] = useState(false);
@@ -41,6 +44,7 @@ const ReportsPage = () => {
   const [successMessage, setSuccessMessage] = useState('');
 
   const latestReport = reports[0];
+  const currentSelectedReport = reports.find(r => r.id === selectedReport) || latestReport;
 
   useEffect(() => {
     if (location.state?.highlightReportId) {
@@ -71,27 +75,79 @@ const ReportsPage = () => {
   }, [location.state]);
 
   const handleGenerateWeeklyReport = () => {
-    const newReport = {
-      id: `report-${Date.now()}`,
-      weekStart: getToday(),
+    const { getTodayRecords: getTodayDietRecords, records: allDietRecords } = useDietStore.getState();
+    const { getWeeklyTotalMinutes } = useExerciseStore.getState();
+    const { getWeeklyRecords } = useBodyStore.getState();
+    
+    const today = new Date();
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() - 6);
+    
+    const dietRecords = allDietRecords.filter(r => {
+      const recordDate = new Date(r.date);
+      return recordDate >= weekStart && recordDate <= today;
+    });
+    
+    const totalCalories = dietRecords.reduce((sum, r) => sum + r.calorieRange[0], 0);
+    const avgCalories = dietRecords.length > 0 ? Math.round(totalCalories / dietRecords.length) : 0;
+    const totalExerciseMinutes = getWeeklyTotalMinutes();
+    const weeklyWeightRecords = getWeeklyRecords();
+    const weightChange = weeklyWeightRecords.length >= 2 
+      ? Math.round((weeklyWeightRecords[weeklyWeightRecords.length - 1].weight - weeklyWeightRecords[0].weight) * 10) / 10
+      : 0;
+    const checkInDays = new Set(dietRecords.map(r => r.date)).size;
+    
+    const highlights = [];
+    const improvements = [];
+    const recommendations = [];
+    
+    if (totalExerciseMinutes >= 150) highlights.push('运动时长达标');
+    if (avgCalories <= 1600 && avgCalories >= 1200) highlights.push('饮食控制良好');
+    if (weightChange < 0) highlights.push('体重稳步下降');
+    if (checkInDays >= 5) highlights.push('打卡坚持良好');
+    
+    if (dietRecords.filter(r => r.mealType === 'breakfast').length < 4) {
+      improvements.push('早餐记录不够完整');
+      recommendations.push('记得每天记录早餐，保证营养均衡');
+    }
+    if (totalExerciseMinutes < 150) {
+      improvements.push('运动时长略有不足');
+      recommendations.push('建议每周至少150分钟中等强度运动');
+    }
+    if (dietRecords.filter(r => r.isHighRisk).length > 2) {
+      improvements.push('高风险食物偏多');
+      recommendations.push('尝试用推荐的替代食谱调整饮食');
+    }
+    if (highlights.length === 0) {
+      highlights.push('继续保持记录习惯');
+    }
+    if (improvements.length === 0) {
+      improvements.push('保持当前状态，继续加油');
+      recommendations.push('均衡饮食，适度运动，保持良好心态');
+    }
+    
+    const newReport = addReport({
+      weekStart: weekStart.toISOString().split('T')[0],
       weekEnd: getToday(),
       summary: {
-        avgCalories: 1450,
-        totalExerciseMinutes: 210,
-        weightChange: -0.8,
-        checkInDays: 6,
-        avgDailyCalories: 1450,
+        avgCalories,
+        totalExerciseMinutes,
+        weightChange,
+        checkInDays,
+        avgDailyCalories: avgCalories,
       },
-      highlights: ['运动时长达标', '饮食控制良好', '体重稳步下降'],
-      improvements: ['早餐蛋白质摄入不足', '周末热量略有超标'],
-      recommendations: ['增加鸡蛋、牛奶等高蛋白食物', '周末注意控制零食摄入'],
-      createdAt: new Date().toISOString(),
-    };
+      highlights,
+      improvements,
+      recommendations,
+      nutritionistFeedback: recommendations.join(' '),
+    });
 
+    setSelectedReport(newReport.id);
+    
     addNotification({
       type: 'report',
       title: '📊 周报告已生成',
-      content: `您的本周健康报告已生成，体重下降 ${newReport.summary.weightChange} kg，点击查看详细分析和营养师建议。`,
+      content: `您的本周健康报告已生成，体重${weightChange >= 0 ? '上升' : '下降'} ${Math.abs(weightChange)} kg，点击查看详细分析和营养师建议。`,
       relatedRecordId: newReport.id,
     });
 
@@ -194,54 +250,60 @@ const ReportsPage = () => {
         </button>
       </div>
 
-      {latestReport && (
+      {currentSelectedReport && (
         <div className="card-gradient bg-gradient-to-br from-primary-500 to-primary-600 text-white">
           <div className="flex items-start justify-between">
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <FileText size={20} />
-                <span className="font-semibold">本周健康报告</span>
-                <span className="px-2 py-0.5 bg-white/20 rounded-full text-xs">最新</span>
+                <span className="font-semibold">
+                  {currentSelectedReport.id === latestReport?.id ? '本周健康报告' : '历史健康报告'}
+                </span>
+                {currentSelectedReport.id === latestReport?.id && (
+                  <span className="px-2 py-0.5 bg-white/20 rounded-full text-xs">最新</span>
+                )}
               </div>
               <p className="text-sm opacity-75 mb-4">
-                {formatDate(latestReport.weekStart)} - {formatDate(latestReport.weekEnd)}
+                {formatDate(currentSelectedReport.weekStart)} - {formatDate(currentSelectedReport.weekEnd)}
               </p>
               <div className="grid grid-cols-4 gap-4 mb-4">
                 <div>
                   <p className="text-sm opacity-75">平均热量</p>
-                  <p className="text-2xl font-bold font-mono">{latestReport.summary.avgCalories}</p>
+                  <p className="text-2xl font-bold font-mono">{currentSelectedReport.summary.avgCalories}</p>
                   <p className="text-xs opacity-75">kcal/天</p>
                 </div>
                 <div>
                   <p className="text-sm opacity-75">运动时长</p>
-                  <p className="text-2xl font-bold font-mono">{latestReport.summary.totalExerciseMinutes}</p>
+                  <p className="text-2xl font-bold font-mono">{currentSelectedReport.summary.totalExerciseMinutes}</p>
                   <p className="text-xs opacity-75">分钟</p>
                 </div>
                 <div>
                   <p className="text-sm opacity-75">体重变化</p>
-                  <p className="text-2xl font-bold font-mono">{latestReport.summary.weightChange}</p>
+                  <p className="text-2xl font-bold font-mono">{currentSelectedReport.summary.weightChange}</p>
                   <p className="text-xs opacity-75">kg</p>
                 </div>
                 <div>
                   <p className="text-sm opacity-75">打卡天数</p>
-                  <p className="text-2xl font-bold font-mono">{latestReport.summary.checkInDays}</p>
+                  <p className="text-2xl font-bold font-mono">{currentSelectedReport.summary.checkInDays}</p>
                   <p className="text-xs opacity-75">天</p>
                 </div>
               </div>
             </div>
             <button
-              onClick={() => setSelectedReport(selectedReport === latestReport.id ? null : latestReport.id)}
+              onClick={() => setSelectedReport(selectedReport === currentSelectedReport.id ? null : currentSelectedReport.id)}
               className="p-2 bg-white/20 rounded-xl hover:bg-white/30 transition-colors"
             >
-              <ChevronRight size={20} className={`transition-transform ${selectedReport === latestReport.id ? 'rotate-90' : ''}`} />
+              <ChevronRight size={20} className={`transition-transform ${selectedReport === currentSelectedReport.id ? 'rotate-90' : ''}`} />
             </button>
           </div>
         </div>
       )}
 
-      {selectedReport && (
+      {selectedReport && currentSelectedReport && (
         <div className="card">
-          <h3 className="font-semibold text-warmgray-800 mb-4">📊 本周报告详情</h3>
+          <h3 className="font-semibold text-warmgray-800 mb-4">
+            📊 {currentSelectedReport.id === latestReport?.id ? '本周' : '历史'}报告详情
+          </h3>
           <div className="space-y-6">
             <div>
               <h4 className="font-medium text-warmgray-700 mb-3 flex items-center gap-2">
@@ -249,7 +311,7 @@ const ReportsPage = () => {
                 本周亮点
               </h4>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                {latestReport?.highlights.map((highlight, idx) => (
+                {currentSelectedReport.highlights.map((highlight, idx) => (
                   <div key={idx} className="p-3 bg-yellow-50 rounded-xl text-sm text-yellow-800">
                     {highlight}
                   </div>
@@ -259,13 +321,15 @@ const ReportsPage = () => {
 
             <div>
               <h4 className="font-medium text-warmgray-700 mb-3 flex items-center gap-2">
-                <MessageSquare size={18} className="text-primary-500" />
-                营养师点评
+                <AlertCircle size={18} className="text-accent-500" />
+                待改进
               </h4>
-              <div className="p-4 bg-primary-50 rounded-xl border-l-4 border-primary-500">
-                <p className="text-primary-800 leading-relaxed">
-                  {latestReport?.nutritionistFeedback}
-                </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {currentSelectedReport.improvements.map((imp, idx) => (
+                  <div key={idx} className="p-3 bg-accent-50 rounded-xl text-sm text-accent-800">
+                    {imp}
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -275,7 +339,7 @@ const ReportsPage = () => {
                 下周建议
               </h4>
               <div className="space-y-2">
-                {latestReport?.recommendations.map((rec, idx) => (
+                {currentSelectedReport.recommendations.map((rec, idx) => (
                   <div key={idx} className="flex items-start gap-3 p-3 bg-cream-50 rounded-xl">
                     <span className="w-6 h-6 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center text-sm font-medium flex-shrink-0">
                       {idx + 1}

@@ -82,6 +82,7 @@ export interface NutritionistNote {
   content: string;
   isHighRisk: boolean;
   createdAt: string;
+  updatedAt?: string;
   reply?: string;
   replyAt?: string;
 }
@@ -124,6 +125,7 @@ export interface WeeklyReport {
   nutritionistFeedback: string;
   recommendations: string[];
   highlights: string[];
+  improvements: string[];
   generatedAt: string;
 }
 

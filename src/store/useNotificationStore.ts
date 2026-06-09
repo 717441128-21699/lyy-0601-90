@@ -16,6 +16,7 @@ interface NotificationState {
   markAllAsRead: () => void;
   createReviewRequest: (data: Omit<ReviewRequest, 'id' | 'userId' | 'status' | 'createdAt'>) => ReviewRequest;
   addNotification: (data: Omit<Notification, 'id' | 'userId' | 'read' | 'createdAt'>) => Notification;
+  addReport: (data: Omit<WeeklyReport, 'id' | 'userId' | 'generatedAt'>) => WeeklyReport;
   getUnreadCount: () => number;
   getNotificationsByType: (type: Notification['type']) => Notification[];
   checkAndSendReminders: () => void;
@@ -88,6 +89,23 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
     });
     
     return newNotif;
+  },
+  
+  addReport: (data) => {
+    const newReport: WeeklyReport = {
+      ...data,
+      id: generateId('report'),
+      userId: 'user-001',
+      generatedAt: getTodayISO(),
+    };
+    
+    set((state) => {
+      const updated = [newReport, ...state.reports];
+      storage.set('reports', updated);
+      return { reports: updated };
+    });
+    
+    return newReport;
   },
   
   getUnreadCount: () => {

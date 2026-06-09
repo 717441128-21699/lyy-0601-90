@@ -18,6 +18,7 @@ import {
 import StatCard from '@/components/StatCard';
 import ProgressRing from '@/components/ProgressRing';
 import Calendar from '@/components/Calendar';
+import RiskReviewPanel from '@/components/RiskReviewPanel';
 import { useUserStore } from '@/store/useUserStore';
 import { useDietStore } from '@/store/useDietStore';
 import { useExerciseStore } from '@/store/useExerciseStore';
@@ -421,6 +422,8 @@ const Dashboard = () => {
           </div>
         </div>
       </div>
+
+      <RiskReviewPanel />
 
       <div className="card">
         <div className="flex items-center justify-between mb-6">
