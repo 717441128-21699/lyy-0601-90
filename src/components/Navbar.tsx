@@ -45,12 +45,23 @@ const Navbar = () => {
     markAsRead(notif.id);
     setShowNotifications(false);
     
-    if (notif.type === 'high_risk' || notif.type === 'note') {
-      navigate('/nutritionist');
-    } else if (notif.type === 'report') {
-      navigate('/reports');
-    } else if (notif.type === 'reminder') {
-      navigate('/diet');
+    switch (notif.type) {
+      case 'high_risk':
+        navigate('/diet', { state: { highlightId: notif.relatedRecordId } });
+        break;
+      case 'note':
+        navigate('/nutritionist', { state: { highlightNoteId: notif.relatedRecordId } });
+        break;
+      case 'report':
+        navigate('/reports', { state: { highlightReportId: notif.relatedRecordId } });
+        break;
+      case 'reminder':
+        navigate('/diet');
+        break;
+      case 'system':
+      default:
+        navigate('/notifications');
+        break;
     }
   };
 
@@ -141,7 +152,7 @@ const Navbar = () => {
                   <button
                     onClick={() => {
                       setShowNotifications(false);
-                      navigate('/nutritionist');
+                      navigate('/notifications');
                     }}
                     className="w-full py-2 text-center text-sm text-primary-600 hover:text-primary-700 font-medium"
                   >

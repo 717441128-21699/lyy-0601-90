@@ -39,6 +39,7 @@ const BodyStatsPage = () => {
   const [note, setNote] = useState('');
   const [targetWeight, setTargetWeight] = useState('');
   const [activeTab, setActiveTab] = useState<'weight' | 'waist'>('weight');
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const latestRecord = getLatestRecord();
   const weightLossPercent = getWeightLossRate(user.startWeight, user.currentWeight);
@@ -73,7 +74,7 @@ const BodyStatsPage = () => {
 
     if (!weightNum || weightNum < 20 || weightNum > 300) return;
 
-    addRecord({
+    const record = addRecord({
       date: getToday(),
       weight: weightNum,
       waist: waistNum,
@@ -89,6 +90,17 @@ const BodyStatsPage = () => {
     setHip('');
     setNote('');
     setShowAddModal(false);
+
+    const prevRecord = records.find(r => r.date < getToday());
+    const diff = prevRecord ? weightNum - prevRecord.weight : 0;
+    if (diff > 0) {
+      setSuccessMessage(`📝 体重记录成功！较上次上升 ${diff.toFixed(1)} kg，继续加油！`);
+    } else if (diff < 0) {
+      setSuccessMessage(`🎉 体重记录成功！较上次下降 ${Math.abs(diff).toFixed(1)} kg，太棒了！`);
+    } else {
+      setSuccessMessage('✅ 体重记录成功！体重保持稳定，继续保持！');
+    }
+    setTimeout(() => setSuccessMessage(null), 3000);
   };
 
   const handleUpdateTarget = () => {
@@ -119,6 +131,19 @@ const BodyStatsPage = () => {
 
   return (
     <div className="space-y-6">
+      {successMessage && (
+        <div className="fixed top-24 right-6 z-50 animate-fade-in">
+          <div className="bg-white border-l-4 border-primary-500 rounded-xl shadow-xl p-4 pr-6 flex items-center gap-3 min-w-80">
+            <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center">
+              <span className="text-xl">✅</span>
+            </div>
+            <div className="flex-1">
+              <p className="font-medium text-warmgray-800">{successMessage}</p>
+            </div>
+          </div>
+        </div>
+      )}
+      
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-warmgray-800">体围体重</h1>

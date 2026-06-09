@@ -8,7 +8,7 @@ import { calculateExerciseCalories } from '@/utils/calories';
 interface ExerciseState {
   records: ExerciseRecord[];
   exerciseTypes: ExerciseType[];
-  addRecord: (data: Omit<ExerciseRecord, 'id' | 'userId' | 'calories' | 'createdAt'>) => void;
+  addRecord: (data: Omit<ExerciseRecord, 'id' | 'userId' | 'calories' | 'createdAt'>) => ExerciseRecord;
   getTodayRecords: () => ExerciseRecord[];
   getRecordsByDate: (date: string) => ExerciseRecord[];
   getWeeklyTotalMinutes: () => number;
@@ -25,8 +25,8 @@ export const useExerciseStore = create<ExerciseState>((set, get) => ({
   records: getInitialRecords(),
   exerciseTypes: mockExerciseTypes,
   
-  addRecord: (data) => set((state) => {
-    const exerciseType = state.exerciseTypes.find(t => t.id === data.exerciseTypeId);
+  addRecord: (data) => {
+    const exerciseType = get().exerciseTypes.find(t => t.id === data.exerciseTypeId);
     const calories = calculateExerciseCalories(exerciseType, data.duration);
     
     const newRecord: ExerciseRecord = {
@@ -36,10 +36,15 @@ export const useExerciseStore = create<ExerciseState>((set, get) => ({
       calories,
       createdAt: getTodayISO(),
     };
-    const updated = [newRecord, ...state.records];
-    storage.set('exerciseRecords', updated);
-    return { records: updated };
-  }),
+    
+    set((state) => {
+      const updated = [newRecord, ...state.records];
+      storage.set('exerciseRecords', updated);
+      return { records: updated };
+    });
+    
+    return newRecord;
+  },
   
   getTodayRecords: () => {
     const today = getToday();

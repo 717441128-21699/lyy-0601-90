@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Flame,
   Target,
@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   Clock,
   Star,
+  Bell,
 } from 'lucide-react';
 import StatCard from '@/components/StatCard';
 import ProgressRing from '@/components/ProgressRing';
@@ -31,7 +32,32 @@ const Dashboard = () => {
   const { getTodayRecords: getTodayExerciseRecords, getStreakDays, getWeeklyTotalMinutes } = useExerciseStore();
   const { getLatestRecord, getWeeklyRecords } = useBodyStore();
   const { todos, toggleTodo } = useNoteStore();
-  const { notifications } = useNotificationStore();
+  const { notifications, checkAndSendReminders, markAsRead } = useNotificationStore();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    checkAndSendReminders();
+  }, [checkAndSendReminders]);
+
+  const handleNotificationClick = (notif: typeof notifications[0]) => {
+    markAsRead(notif.id);
+    switch (notif.type) {
+      case 'high_risk':
+        navigate('/diet', { state: { highlightId: notif.relatedRecordId } });
+        break;
+      case 'note':
+        navigate('/nutritionist', { state: { highlightNoteId: notif.relatedRecordId } });
+        break;
+      case 'report':
+        navigate('/reports', { state: { highlightReportId: notif.relatedRecordId } });
+        break;
+      case 'reminder':
+        navigate('/diet');
+        break;
+      default:
+        navigate('/notifications');
+    }
+  };
 
   const todayDietRecords = getTodayDietRecords();
   const todayExerciseRecords = getTodayExerciseRecords();
@@ -321,7 +347,8 @@ const Dashboard = () => {
               unreadNotifications.map((notif) => (
                 <div
                   key={notif.id}
-                  className={`p-3 rounded-xl border-l-4 ${
+                  onClick={() => handleNotificationClick(notif)}
+                  className={`p-3 rounded-xl border-l-4 cursor-pointer hover:shadow-md transition-all ${
                     notif.type === 'high_risk'
                       ? 'bg-red-50 border-red-500'
                       : notif.type === 'reminder'

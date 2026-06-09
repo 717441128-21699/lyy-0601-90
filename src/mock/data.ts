@@ -141,7 +141,7 @@ const generateDietRecords = (): DietRecord[] => {
             isHighRisk,
             riskReason: isHighRisk ? riskReason : undefined,
             alternativeRecipe,
-            createdAt: `${date}T${8 + idx * 4}:${String(Math.floor(Math.random() * 60)).padStart(2, '0')}:00`,
+            createdAt: `${date}T${String(8 + idx * 4).padStart(2, '0')}:${String(Math.floor(Math.random() * 60)).padStart(2, '0')}:00`,
           });
         }
       }

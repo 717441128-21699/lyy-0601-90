@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   MessageCircle,
   AlertTriangle,
@@ -16,17 +16,35 @@ import {
 import { useNoteStore } from '@/store/useNoteStore';
 import { useDietStore } from '@/store/useDietStore';
 import { formatDateTime, getMealLabel } from '@/utils/date';
+import { useLocation } from 'react-router-dom';
 
 const NutritionistNotesPage = () => {
   const { notes, todos, replyToNote, toggleTodo, getUnreadCount, getHighRiskCount } = useNoteStore();
   const { records: dietRecords } = useDietStore();
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState<'all' | 'highRisk' | 'unread'>('all');
   const [replyContent, setReplyContent] = useState<Record<string, string>>({});
   const [expandedNote, setExpandedNote] = useState<string | null>(null);
+  const [highlightNoteId, setHighlightNoteId] = useState<string | null>(null);
   const [showTodoModal, setShowTodoModal] = useState(false);
   const [todoTitle, setTodoTitle] = useState('');
   const [todoDesc, setTodoDesc] = useState('');
   const [todoType, setTodoType] = useState<'diet' | 'exercise' | 'weight' | 'note'>('diet');
+
+  useEffect(() => {
+    if (location.state?.highlightNoteId) {
+      setHighlightNoteId(location.state.highlightNoteId);
+      setExpandedNote(location.state.highlightNoteId);
+      setTimeout(() => {
+        const element = document.getElementById(`note-${location.state.highlightNoteId}`);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 100);
+      setTimeout(() => setHighlightNoteId(null), 3000);
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   const filteredNotes = notes.filter(note => {
     if (activeTab === 'highRisk') return note.isHighRisk;
@@ -186,7 +204,10 @@ const NutritionistNotesPage = () => {
                 return (
                   <div
                     key={note.id}
-                    className={`card ${note.isHighRisk ? 'border-red-200 bg-red-50/30' : ''}`}
+                    id={`note-${note.id}`}
+                    className={`card ${note.isHighRisk ? 'border-red-200 bg-red-50/30' : ''} ${
+                      highlightNoteId === note.id ? 'ring-4 ring-primary-300 ring-opacity-75 animate-pulse' : ''
+                    }`}
                   >
                     <div className="flex items-start gap-4">
                       <img

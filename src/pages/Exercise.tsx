@@ -8,6 +8,7 @@ import {
   Calendar,
   Award,
   Activity,
+  CheckCircle,
 } from 'lucide-react';
 import {
   LineChart,
@@ -21,17 +22,20 @@ import {
   Area,
 } from 'recharts';
 import { useExerciseStore } from '@/store/useExerciseStore';
+import { useNotificationStore } from '@/store/useNotificationStore';
 import { getToday, formatDate, generateDaysArray, formatDateTime } from '@/utils/date';
 import { formatCalories } from '@/utils/calories';
 import type { ExerciseType } from '@/types';
 
 const ExercisePage = () => {
   const { records, exerciseTypes, addRecord, getStreakDays, getWeeklyTotalMinutes } = useExerciseStore();
+  const { addNotification } = useNotificationStore();
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedType, setSelectedType] = useState<ExerciseType | null>(null);
   const [duration, setDuration] = useState(30);
   const [notes, setNotes] = useState('');
   const [activeTab, setActiveTab] = useState<'today' | 'history'>('today');
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const today = getToday();
   const todayRecords = records.filter(r => r.date === today);
@@ -53,16 +57,42 @@ const ExercisePage = () => {
 
   const categories = Array.from(new Set(exerciseTypes.map(t => t.category)));
 
+  const showSuccess = (message: string) => {
+    setSuccessMessage(message);
+    setTimeout(() => setSuccessMessage(null), 3000);
+  };
+
   const handleAddExercise = () => {
     if (!selectedType) return;
     
-    addRecord({
+    const record = addRecord({
       date: today,
       exerciseType: selectedType.name,
       exerciseTypeId: selectedType.id,
       duration,
       notes,
     });
+
+    const newStreak = getStreakDays();
+    
+    addNotification({
+      type: 'system',
+      title: '💪 运动打卡成功',
+      content: `您完成了 ${selectedType.name} ${duration} 分钟，消耗约 ${estimatedCalories} 千卡，继续保持！`,
+      relatedRecordId: record.id,
+    });
+
+    if (newStreak > streakDays && newStreak % 7 === 0) {
+      addNotification({
+        type: 'system',
+        title: '🏆 里程碑达成',
+        content: `恭喜！您已连续运动 ${newStreak} 天，达成新的里程碑！`,
+        relatedRecordId: record.id,
+      });
+      showSuccess(`太棒了！连续运动 ${newStreak} 天，已达成里程碑！`);
+    } else {
+      showSuccess(`${selectedType.name} ${duration} 分钟已记录，消耗 ${estimatedCalories} 千卡`);
+    }
     
     setSelectedType(null);
     setDuration(30);
@@ -95,6 +125,17 @@ const ExercisePage = () => {
 
   return (
     <div className="space-y-6">
+      {successMessage && (
+        <div className="fixed top-20 right-6 z-50 animate-fade-in">
+          <div className="flex items-center gap-3 px-5 py-3 bg-white rounded-xl shadow-lg border border-primary-200">
+            <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
+              <CheckCircle size={18} className="text-primary-500" />
+            </div>
+            <span className="text-warmgray-700 font-medium">{successMessage}</span>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-warmgray-800">运动打卡</h1>

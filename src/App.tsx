@@ -7,6 +7,7 @@ import BodyStats from "@/pages/BodyStats";
 import NutritionistNotes from "@/pages/NutritionistNotes";
 import Leaderboard from "@/pages/Leaderboard";
 import Reports from "@/pages/Reports";
+import Notifications from "@/pages/Notifications";
 
 export default function App() {
   return (
@@ -20,6 +21,7 @@ export default function App() {
           <Route path="/nutritionist" element={<NutritionistNotes />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
           <Route path="/reports" element={<Reports />} />
+          <Route path="/notifications" element={<Notifications />} />
         </Route>
       </Routes>
     </Router>

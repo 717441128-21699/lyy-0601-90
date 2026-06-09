@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   FileText,
   Calendar,
@@ -22,18 +22,36 @@ import {
 import { useNotificationStore } from '@/store/useNotificationStore';
 import { useUserStore } from '@/store/useUserStore';
 import { formatDate, formatDateTime, getToday } from '@/utils/date';
+import { useLocation } from 'react-router-dom';
 
 const ReportsPage = () => {
-  const { reports, reviewRequests, createReviewRequest } = useNotificationStore();
+  const { reports, reviewRequests, createReviewRequest, addNotification } = useNotificationStore();
   const { user } = useUserStore();
+  const location = useLocation();
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [selectedReport, setSelectedReport] = useState<string | null>(null);
+  const [highlightReportId, setHighlightReportId] = useState<string | null>(null);
   const [preferredDate, setPreferredDate] = useState('');
   const [preferredTime, setPreferredTime] = useState('19:00');
   const [reviewType, setReviewType] = useState<'video' | 'voice'>('video');
   const [reviewNotes, setReviewNotes] = useState('');
 
   const latestReport = reports[0];
+
+  useEffect(() => {
+    if (location.state?.highlightReportId) {
+      setHighlightReportId(location.state.highlightReportId);
+      setSelectedReport(location.state.highlightReportId);
+      setTimeout(() => {
+        const element = document.getElementById(`report-${location.state.highlightReportId}`);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 100);
+      setTimeout(() => setHighlightReportId(null), 3000);
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   const handleCreateReview = () => {
     if (!preferredDate || !preferredTime) return;
@@ -238,8 +256,11 @@ const ReportsPage = () => {
               {reports.map((report) => (
                 <div
                   key={report.id}
+                  id={`report-${report.id}`}
                   onClick={() => setSelectedReport(selectedReport === report.id ? null : report.id)}
-                  className="p-4 bg-cream-50 rounded-xl hover:bg-cream-100 transition-colors cursor-pointer"
+                  className={`p-4 bg-cream-50 rounded-xl hover:bg-cream-100 transition-colors cursor-pointer ${
+                    highlightReportId === report.id ? 'ring-4 ring-primary-300 ring-opacity-75 animate-pulse' : ''
+                  }`}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">

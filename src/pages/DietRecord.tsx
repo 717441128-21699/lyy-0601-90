@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Camera,
   Plus,
@@ -9,20 +9,26 @@ import {
   Check,
   X,
   Info,
+  CheckCircle,
+  ShoppingBag,
 } from 'lucide-react';
 import { useDietStore } from '@/store/useDietStore';
 import { getMealLabel, getMealEmoji, getToday, formatDateTime } from '@/utils/date';
 import { formatCalorieRange } from '@/utils/calories';
 import { generateId } from '@/utils/storage';
 import type { DietRecord, Recipe } from '@/types';
+import { useLocation } from 'react-router-dom';
 
 const mealTypes: Array<'breakfast' | 'lunch' | 'dinner' | 'snack'> = ['breakfast', 'lunch', 'dinner', 'snack'];
 
 const DietRecordPage = () => {
-  const { records, shoppingList, addRecord, toggleShoppingItem, removeShoppingItem } = useDietStore();
+  const { records, shoppingList, addRecord, toggleShoppingItem, removeShoppingItem, addRecipeIngredients } = useDietStore();
+  const location = useLocation();
   const [selectedDate, setSelectedDate] = useState(getToday());
   const [showAddModal, setShowAddModal] = useState(false);
   const [showShoppingList, setShowShoppingList] = useState(false);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [newMeal, setNewMeal] = useState<{
     mealType: 'breakfast' | 'lunch' | 'dinner' | 'snack';
     description: string;
@@ -33,6 +39,30 @@ const DietRecordPage = () => {
     photoUrl: '',
   });
   const [activeTab, setActiveTab] = useState<'today' | 'history'>('today');
+
+  useEffect(() => {
+    if (location.state?.highlightId) {
+      setHighlightId(location.state.highlightId);
+      const record = records.find(r => r.id === location.state.highlightId);
+      if (record) {
+        setSelectedDate(record.date);
+        setActiveTab(record.date === getToday() ? 'today' : 'history');
+        setTimeout(() => {
+          const element = document.getElementById(`record-${location.state.highlightId}`);
+          if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 100);
+        setTimeout(() => setHighlightId(null), 3000);
+      }
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state, records]);
+
+  const showSuccess = (message: string) => {
+    setSuccessMessage(message);
+    setTimeout(() => setSuccessMessage(null), 3000);
+  };
 
   const todayRecords = records.filter(r => r.date === selectedDate);
   const historyRecords = records.filter(r => r.date !== selectedDate);
@@ -49,10 +79,16 @@ const DietRecordPage = () => {
   const handleAddMeal = () => {
     if (!newMeal.description.trim()) return;
     
-    addRecord({
+    const result = addRecord({
       ...newMeal,
       date: selectedDate,
     });
+    
+    if (result.wasHighRisk) {
+      showSuccess(`已记录，系统检测到「${newMeal.description}」可能为高风险食物，已为您推荐替代食谱`);
+    } else {
+      showSuccess(`「${newMeal.description}」已记录，继续保持！`);
+    }
     
     setNewMeal({
       mealType: 'breakfast',
@@ -60,6 +96,15 @@ const DietRecordPage = () => {
       photoUrl: '',
     });
     setShowAddModal(false);
+  };
+
+  const handleAddRecipeToShopping = (recipe: Recipe, recordId: string) => {
+    const addedCount = addRecipeIngredients(recipe, recordId);
+    if (addedCount > 0) {
+      showSuccess(`已将「${recipe.name}」的 ${addedCount} 种食材添加到购物清单`);
+    } else {
+      showSuccess(`「${recipe.name}」的食材已在购物清单中`);
+    }
   };
 
   const handlePhotoUpload = () => {
@@ -77,6 +122,17 @@ const DietRecordPage = () => {
 
   return (
     <div className="space-y-6">
+      {successMessage && (
+        <div className="fixed top-20 right-6 z-50 animate-fade-in">
+          <div className="flex items-center gap-3 px-5 py-3 bg-white rounded-xl shadow-lg border border-primary-200">
+            <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
+              <CheckCircle size={18} className="text-primary-500" />
+            </div>
+            <span className="text-warmgray-700 font-medium">{successMessage}</span>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-warmgray-800">饮食记录</h1>
@@ -200,7 +256,10 @@ const DietRecordPage = () => {
                       {records.map((record) => (
                         <div
                           key={record.id}
-                          className={`p-4 rounded-2xl border-2 transition-all ${getStatusColor(record)}`}
+                          id={`record-${record.id}`}
+                          className={`p-4 rounded-2xl border-2 transition-all ${getStatusColor(record)} ${
+                            highlightId === record.id ? 'ring-4 ring-primary-300 ring-opacity-75 animate-pulse' : ''
+                          }`}
                         >
                           <div className="flex gap-4">
                             {record.photoUrl ? (
@@ -244,17 +303,41 @@ const DietRecordPage = () => {
                               
                               {record.alternativeRecipe && (
                                 <div className="mt-3 p-3 bg-primary-100 rounded-xl">
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <ChefHat size={16} className="text-primary-600" />
-                                    <p className="font-medium text-primary-700">推荐替代食谱</p>
+                                  <div className="flex items-center justify-between mb-2">
+                                    <div className="flex items-center gap-2">
+                                      <ChefHat size={16} className="text-primary-600" />
+                                      <p className="font-medium text-primary-700">推荐替代食谱</p>
+                                    </div>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleAddRecipeToShopping(record.alternativeRecipe!, record.id);
+                                      }}
+                                      className="flex items-center gap-1 px-3 py-1.5 bg-white text-primary-600 rounded-lg text-sm font-medium hover:bg-primary-50 transition-colors shadow-sm"
+                                    >
+                                      <ShoppingBag size={14} />
+                                      加入购物清单
+                                    </button>
                                   </div>
                                   <p className="font-medium text-warmgray-800">{record.alternativeRecipe.name}</p>
                                   <p className="text-sm text-warmgray-500 mt-1">
                                     {record.alternativeRecipe.calories} kcal
                                   </p>
-                                  <p className="text-sm text-warmgray-600 mt-2 line-clamp-2">
-                                    {record.alternativeRecipe.instructions}
-                                  </p>
+                                  <div className="mt-2">
+                                    <p className="text-xs text-primary-600 mb-1">所需食材：</p>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {record.alternativeRecipe.ingredients.slice(0, 5).map((ing, idx) => (
+                                        <span key={idx} className="px-2 py-0.5 bg-white rounded-full text-xs text-warmgray-600">
+                                          {ing.name}
+                                        </span>
+                                      ))}
+                                      {record.alternativeRecipe.ingredients.length > 5 && (
+                                        <span className="px-2 py-0.5 bg-white rounded-full text-xs text-warmgray-500">
+                                          +{record.alternativeRecipe.ingredients.length - 5}种
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
                                 </div>
                               )}
                               
@@ -280,7 +363,10 @@ const DietRecordPage = () => {
                 historyRecords.slice(0, 20).map((record) => (
                   <div
                     key={record.id}
-                    className={`p-4 rounded-2xl border-2 transition-all ${getStatusColor(record)}`}
+                    id={`record-${record.id}`}
+                    className={`p-4 rounded-2xl border-2 transition-all ${getStatusColor(record)} ${
+                      highlightId === record.id ? 'ring-4 ring-primary-300 ring-opacity-75 animate-pulse' : ''
+                    }`}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -292,10 +378,40 @@ const DietRecordPage = () => {
                           </p>
                         </div>
                       </div>
-                      {record.isHighRisk && (
-                        <AlertTriangle size={20} className="text-red-500" />
-                      )}
+                      <div className="flex items-center gap-2">
+                        {record.isHighRisk && (
+                          <AlertTriangle size={20} className="text-red-500" />
+                        )}
+                        {record.alternativeRecipe && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleAddRecipeToShopping(record.alternativeRecipe!, record.id);
+                            }}
+                            className="p-2 bg-primary-100 text-primary-600 rounded-lg hover:bg-primary-200 transition-colors"
+                            title="加入购物清单"
+                          >
+                            <ShoppingBag size={16} />
+                          </button>
+                        )}
+                      </div>
                     </div>
+                    {record.isHighRisk && record.riskReason && (
+                      <div className="mt-3 p-3 bg-red-50 rounded-xl">
+                        <p className="text-sm text-red-600 flex items-start gap-2">
+                          <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
+                          <span>{record.riskReason}</span>
+                        </p>
+                      </div>
+                    )}
+                    {record.alternativeRecipe && (
+                      <div className="mt-3 p-3 bg-primary-50 rounded-xl">
+                        <p className="text-sm text-primary-700">
+                          <span className="font-medium">替代食谱：</span>
+                          {record.alternativeRecipe.name} ({record.alternativeRecipe.calories} kcal)
+                        </p>
+                      </div>
+                    )}
                   </div>
                 ))
               )}

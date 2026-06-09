@@ -3,10 +3,12 @@ import type { NutritionistNote, TodoItem } from '@/types';
 import { mockNutritionistNotes, mockTodos } from '@/mock/data';
 import { storage, generateId } from '@/utils/storage';
 import { getToday, getTodayISO } from '@/utils/date';
+import { useNotificationStore } from '@/store/useNotificationStore';
 
 interface NoteState {
   notes: NutritionistNote[];
   todos: TodoItem[];
+  addNote: (data: Omit<NutritionistNote, 'id' | 'userId' | 'createdAt'>) => NutritionistNote;
   replyToNote: (noteId: string, content: string) => void;
   toggleTodo: (todoId: string) => void;
   addTodo: (data: Omit<TodoItem, 'id' | 'userId' | 'completed'>) => void;
@@ -27,6 +29,31 @@ const getInitialTodos = (): TodoItem[] => {
 export const useNoteStore = create<NoteState>((set, get) => ({
   notes: getInitialNotes(),
   todos: getInitialTodos(),
+  
+  addNote: (data) => {
+    const newNote: NutritionistNote = {
+      ...data,
+      id: generateId('note'),
+      userId: 'user-001',
+      createdAt: getTodayISO(),
+    };
+    
+    set((state) => {
+      const updated = [newNote, ...state.notes];
+      storage.set('notes', updated);
+      return { notes: updated };
+    });
+    
+    const { addNotification } = useNotificationStore.getState();
+    addNotification({
+      type: 'note',
+      title: '💬 营养师新留言',
+      content: `营养师给您发了一条新留言：${data.content.substring(0, 30)}...，点击查看详情并回复。`,
+      relatedRecordId: newNote.id,
+    });
+    
+    return newNote;
+  },
   
   replyToNote: (noteId, content) => set((state) => {
     const updated = state.notes.map(note =>
